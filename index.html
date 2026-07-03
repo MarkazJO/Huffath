@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>منظومة متابعة التسميع والحفظ الذكية</title>
+    <title>منظومة الحفاظ لمتابعة التسميع والحفظ</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -244,21 +244,31 @@
         // SYSTEM LOGISTICS CONSTANTS (GLOBAL SCOPE)
         // ==========================================
         const OFFICIAL_RECITATION_DATES = [
-            "2026-06-21", "2026-06-22", "2026-06-23", "2026-06-25", "2026-06-28", "2026-06-30",
-            "2026-07-02", "2026-07-05", "2026-07-07", "2026-07-09", "2026-07-12", "2026-07-14",
-            "2026-07-16", "2026-07-19", "2026-07-21", "2026-07-23", "2026-07-26", "2026-07-28",
-            "2026-07-30", "2026-08-02", "2026-08-04", "2026-08-06", "2026-08-09", "2026-08-11",
-            "2026-08-13", "2026-08-16", "2026-08-18", "2026-08-20"
+            "2026-06-29", "2026-07-01", "2026-07-04", "2026-07-06", "2026-07-08", "2026-07-11",
+            "2026-07-13", "2026-07-15", "2026-07-18", "2026-07-20", "2026-07-22", "2026-07-25",
+            "2026-07-27", "2026-07-29", "2026-08-01", "2026-08-03", "2026-08-05", "2026-08-08",
+            "2026-08-10", "2026-08-12", "2026-08-15", "2026-08-17", "2026-08-19", "2026-08-22",
+            "2026-08-24", "2026-08-26", "2026-08-29"
         ];
+        const FIRST_RECITATION_DATE = "2026-06-29";
+        const WEEKDAY_ABBR = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
-        const FIRST_THREE_DATES = ["2026-06-21", "2026-06-22", "2026-06-23"];
-
-        // FIXED DEFINITION: CORRECTLY DEFINING isSunday (WITH 21st JUNE JADID EXCEPTION) GLOBALLY
-        const isSunday = (dateStr) => {
-            if (!dateStr) return false;
-            if (dateStr === "2026-06-21") return false; // June 21st is standard/Jadid, not Sard
-            const date = new Date(dateStr);
-            return date.getDay() === 0;
+        const getDayOfWeek = (dateStr) => new Date(`${dateStr}T00:00:00`).getDay();
+        const formatDateWithWeekday = (dateStr) => {
+            if (!dateStr) return "-";
+            return `${dateStr} (${WEEKDAY_ABBR[getDayOfWeek(dateStr)]})`;
+        };
+        const isOfficialRecitationDate = (dateStr) => OFFICIAL_RECITATION_DATES.includes(dateStr);
+        const isGoalDay = (dateStr) => {
+            if (!isOfficialRecitationDate(dateStr)) return false;
+            if (dateStr === FIRST_RECITATION_DATE) return false; // First day has zero target
+            const day = getDayOfWeek(dateStr);
+            return day === 3 || day === 6; // Wednesday or Saturday
+        };
+        const isSardDay = (dateStr) => {
+            if (!isOfficialRecitationDate(dateStr)) return false;
+            if (dateStr === FIRST_RECITATION_DATE) return false;
+            return getDayOfWeek(dateStr) === 1; // Monday
         };
 
         const GRADE_VALUES = {
@@ -289,18 +299,6 @@
                     return "bg-amber-50 text-amber-700 border border-amber-100/80";
                 default:
                     return "bg-slate-50 text-slate-600 border border-slate-100";
-            }
-        };
-
-        const WARNING_TYPES = ["حفظ", "إقراء", "سلوك", "غياب"];
-
-        const getWarningStyle = (type) => {
-            switch (type) {
-                case "حفظ":   return { pill: "bg-amber-50 text-amber-700 border-amber-200",   kpi: "bg-amber-50 text-amber-500",   label: "تحذيرات الحفظ" };
-                case "إقراء": return { pill: "bg-orange-50 text-orange-700 border-orange-200",  kpi: "bg-orange-50 text-orange-500",  label: "تحذيرات الإقراء" };
-                case "سلوك": return { pill: "bg-purple-50 text-purple-700 border-purple-200",  kpi: "bg-purple-50 text-purple-500",  label: "تحذيرات السلوك" };
-                case "غياب": return { pill: "bg-red-50 text-red-700 border-red-200",           kpi: "bg-red-50 text-red-500",        label: "إجمالي الغياب" };
-                default:      return { pill: "bg-slate-50 text-slate-600 border-slate-200",    kpi: "bg-slate-50 text-slate-400",   label: type };
             }
         };
 
@@ -344,11 +342,7 @@
         const initialData = {
             "generatedAt": null,
             "version": 1,
-            "students": [],
-            "lessons": {
-                "نخبة١": {},
-                "نخبة٢": {}
-            }
+            "students": []
         };
 
 
@@ -358,7 +352,7 @@
         function App() {
             // Authentication & Session States
             const [isLoggedIn, setIsLoggedIn] = useState(false);
-            const [currentUserRole, setCurrentUserRole] = useState(null); // 'admin' | 'nokhba1' | 'nokhba2' | 'student'
+            const [currentUserRole, setCurrentUserRole] = useState(null); // 'admin' | 'student'
             const [loggedInStudent, setLoggedInStudent] = useState(null); // Student details object if role is student
             const [studentLoginInput, setStudentLoginInput] = useState('');
             const [studentLoginError, setStudentLoginError] = useState('');
@@ -378,7 +372,7 @@
             const [activeTab, setActiveTab] = useState('dashboard'); // 'dashboard' | 'editor'
             const [viewMode, setViewMode] = useState('grid'); // 'grid' | 'list'
             const [searchQuery, setSearchQuery] = useState('');
-            const [selectedLevel, setSelectedLevel] = useState('all'); // Nokhba filters
+            const [selectedLevel, setSelectedLevel] = useState('all');
             const [sortBy, setSortBy] = useState('name-asc'); // Sorting orders
             const [selectedStudent, setSelectedStudent] = useState(null); // Detail modal student
             const [showAddSessionModal, setShowAddSessionModal] = useState(false);
@@ -386,7 +380,7 @@
             const [notification, setNotification] = useState(null);
 
             // Inclusive Date Ranges (Default sets)
-            const [startDate, setStartDate] = useState('2026-06-21');
+            const [startDate, setStartDate] = useState('2026-06-29');
             const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
 
             // Form bindings (Adding sessions)
@@ -401,20 +395,14 @@
 
             // Form bindings (Adding students)
             const [newStudentName, setNewStudentName] = useState('');
-            const [newStudentGroup, setNewStudentGroup] = useState('نخبة١');
-            const [newStudentAttendance, setNewStudentAttendance] = useState('حضر 1 / 27');
-
-            // Lesson History Modal
-            const [showLessonHistory, setShowLessonHistory] = useState(false);
-            const [showLessonHistoryNokhba1, setShowLessonHistoryNokhba1] = useState(false);
-            const [showLessonHistoryNokhba2, setShowLessonHistoryNokhba2] = useState(false);
+            const [newStudentGroup, setNewStudentGroup] = useState('صغرى');
 
             // API Cloud Fetch Sync with Robust Double-parsing
             const loadLiveData = () => {
                 setIsLoading(true);
                 setFetchErrorDetail('');
                 
-                fetch('https://script.google.com/macros/s/AKfycbzq8-tyxptH-OAzZOvo72Y0Wa5QlF7d7Q9tvF4F00G0TTHslpdql5vilyyFQod3rygP/exec')
+                fetch('https://script.google.com/macros/s/AKfycbzmG715vEE01EX_H6B84U6n542MS08hYH9A_Ze18zt6eJgApsx9HXhtqvRfFKv8obIf/exec')
                     .then(response => {
                         if (!response.ok) throw new Error(`خطأ بالطلب البرمجي: ${response.status}`);
                         return response.text();
@@ -498,8 +486,8 @@
                     message: 'هل أنت متأكد من رغبتك في إعادة تعيين البيانات الحالية إلى البيانات الافتراضية؟ سيفقد أي تقدم غير محفوظ بالسحابة.',
                     onConfirm: () => {
                         updateMainData(initialData);
-                        setStartDate('2026-06-21');
-                        setEndDate('2026-07-02');
+                        setStartDate('2026-06-29');
+                        setEndDate(new Date().toISOString().split('T')[0]);
                         setSelectedLevel('all');
                         setShowTroubleshooting(false);
                         triggerNotification('تمت إعادة تعيين البيانات بنجاح', 'info');
@@ -513,28 +501,17 @@
                 return dateStr >= startDate && dateStr <= endDate;
             };
 
+            const expectedDaysInRange = useMemo(() => {
+                return OFFICIAL_RECITATION_DATES.filter(date => date >= startDate && date <= endDate).length;
+            }, [startDate, endDate]);
+
             // Calculate student target expectation pages based on official schedule
             const calculateTargetPages = (groupName, start, end) => {
                 let targetSum = 0;
-                OFFICIAL_RECITATION_DATES.forEach(dateStr => {
-                    if (dateStr >= start && dateStr <= end) {
-                        if (FIRST_THREE_DATES.includes(dateStr)) {
-                            if (groupName === "نخبة١") {
-                                targetSum += 2;
-                            } else if (groupName === "نخبة٢") {
-                                targetSum += 1;
-                            }
-                        } else {
-                            const dateObj = new Date(dateStr);
-                            const dayOfWeek = dateObj.getDay(); // 2 is Tuesday, 4 is Thursday
-                            if (dayOfWeek === 2 || dayOfWeek === 4) {
-                                if (groupName === "نخبة١") {
-                                    targetSum += 4;
-                                } else if (groupName === "نخبة٢") {
-                                    targetSum += 2;
-                                }
-                            }
-                        }
+                OFFICIAL_RECITATION_DATES.forEach((dateStr) => {
+                    if (dateStr < start || dateStr > end) return;
+                    if (isGoalDay(dateStr)) {
+                        targetSum += 2.5;
                     }
                 });
                 return targetSum;
@@ -562,6 +539,20 @@
                     list = list.filter(student => (student.group || student.level) === selectedLevel);
                 }
 
+                const pagesByStudentId = sortBy === 'pages-desc'
+                    ? new Map(
+                        list.map(student => [
+                            student.id,
+                            (student.history || []).reduce((acc, session) => {
+                                if (isDateInRange(session.date)) {
+                                    return acc + (session.new?.pages || 0);
+                                }
+                                return acc;
+                            }, 0)
+                        ])
+                    )
+                    : null;
+
                 list.sort((a, b) => {
                     if (sortBy === 'name-asc') {
                         return a.name.localeCompare(b.name, 'ar');
@@ -570,15 +561,7 @@
                         return b.name.localeCompare(a.name, 'ar');
                     }
                     if (sortBy === 'pages-desc') {
-                        const getNewPagesInRange = (student) => {
-                            return (student.history || []).reduce((acc, session) => {
-                                if (isDateInRange(session.date)) {
-                                    return acc + (session.new?.pages || 0);
-                                }
-                                return acc;
-                            }, 0);
-                        };
-                        return getNewPagesInRange(b) - getNewPagesInRange(a);
+                        return (pagesByStudentId.get(b.id) || 0) - (pagesByStudentId.get(a.id) || 0);
                     }
                     return 0;
                 });
@@ -593,7 +576,7 @@
                 let totalTarget = 0;
                 
                 processedStudents.forEach(student => {
-                    const studentGroup = student.group || student.level || 'نخبة١';
+                    const studentGroup = student.group || student.level || '---';
                     totalTarget += calculateTargetPages(studentGroup, startDate, endDate);
 
                     student.history?.forEach(session => {
@@ -618,18 +601,6 @@
                 };
             }, [processedStudents, startDate, endDate]);
 
-            const overallWarnings = useMemo(() => {
-                const totals = { "حفظ": 0, "إقراء": 0, "سلوك": 0, "غياب": 0 };
-                processedStudents.forEach(student => {
-                    if (student.warnings) {
-                        Object.entries(student.warnings).forEach(([type, count]) => {
-                            if (totals[type] !== undefined) totals[type] += (count || 0);
-                        });
-                    }
-                });
-                return totals;
-            }, [processedStudents]);
-
             // Role assigners
             const handleRoleLogin = (role) => {
                 setCurrentUserRole(role);
@@ -637,15 +608,8 @@
                 setStudentLoginError('');
                 setStudentLoginInput('');
 
-                if (role === 'nokhba1') {
-                    setSelectedLevel('نخبة١');
-                } else if (role === 'nokhba2') {
-                    setSelectedLevel('نخبة٢');
-                } else {
-                    setSelectedLevel('all');
-                }
-
-                triggerNotification(`مرحباً بك! تم تسجيل الدخول كـ ${role === 'admin' ? 'مشرف عام' : role === 'nokhba1' ? 'معلم نخبة ١' : 'معلم نخبة ٢'}`, 'success');
+                setSelectedLevel('all');
+                triggerNotification(`مرحباً بك! تم تسجيل الدخول كـ ${role === 'admin' ? 'الإدارة العامة' : 'طالب'}`, 'success');
             };
 
             // Intelligent student identity matcher
@@ -661,14 +625,6 @@
 
                 if (query === 'admin') {
                     handleRoleLogin('admin');
-                    return;
-                }
-                if (query === 'nukba1' || query === 'nokhba1' || query === 'نخبة١' || query === 'نخبه١') {
-                    handleRoleLogin('nokhba1');
-                    return;
-                }
-                if (query === 'nukba2' || query === 'nokhba2' || query === 'نخبة٢' || query === 'نخبه٢') {
-                    handleRoleLogin('nokhba2');
                     return;
                 }
 
@@ -816,7 +772,6 @@
                     name: newStudentName.trim(),
                     group: newStudentGroup,
                     level: newStudentGroup,
-                    attendance: 'حضر 1 / 27',
                     history: []
                 };
 
@@ -848,7 +803,7 @@
                                         <BookOpen size={28} className="animate-pulse" />
                                     </div>
                                     <h2 className="text-2xl font-black text-white leading-tight">متابعة التسميع والحفظ</h2>
-                                    <p className="text-xs text-slate-400">لوحة المتابعة الذكية وجداول قياس الإنجاز لمجموعات النخبة</p>
+                                    <p className="text-xs text-slate-400">لوحة الحفاظ لمتابعة التسميع والحفظ بشكل ذكي</p>
                                 </div>
 
                                 <div className="border-t border-slate-800"></div>
@@ -901,13 +856,13 @@
                 const studentHistory = loggedInStudent.history || [];
                 const filteredHistory = studentHistory.filter(session => isDateInRange(session.date));
                 
-                const sundaySessions = filteredHistory.filter(session => isSunday(session.date));
-                const weekdaySessions = filteredHistory.filter(session => !isSunday(session.date));
+                const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
+                const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                const sundayReviewPages = sundaySessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                const sundayReviewPages = sardSessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
                 const totalNewPages = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0) + sundayReviewPages;
                 const totalReviewPages = weekdaySessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                const totalSardNew = sundaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                const totalSardNew = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
 
                 // Calculate page range for new memorization
                 const newSessionsWithPages = weekdaySessions.filter(s => s.new?.start && s.new?.end);
@@ -933,7 +888,7 @@
                     : 100;
 
                 const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
-                const expectedDays = OFFICIAL_RECITATION_DATES.filter(date => date >= startDate && date <= endDate).length;
+                const expectedDays = expectedDaysInRange;
 
                 return (
                     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans" dir="rtl">
@@ -963,55 +918,6 @@
                                 <div>
                                     <h2 className="sm:text-xl md:text-3xl font-black text-slate-900">{loggedInStudent.name}</h2>
                                 </div>
-
-                                {(() => {
-                                    const lessonDates = data.lessons && data.lessons[studentGroup] ? Object.keys(data.lessons[studentGroup]).sort().reverse() : [];
-                                    const newestDate = lessonDates.length > 0 ? lessonDates[0] : null;
-                                    return newestDate && (
-                                        <div className="space-y-3 pt-2 border-t border-slate-100">
-                                            <div className="flex items-center justify-between">
-                                                <h3 className="text-xs font-black text-slate-700 flex items-center gap-2">
-                                                    <BookOpen size={14} className="text-blue-600" />
-                                                    <span>آخر الدروس</span>
-                                                </h3>
-                                                <button
-                                                    onClick={() => setShowLessonHistory(true)}
-                                                    className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs font-bold rounded-lg transition-colors"
-                                                >
-                                                    سجل الدروس
-                                                </button>
-                                            </div>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                                {data.lessons[studentGroup][newestDate].map((lesson, idx) => (
-                                                <div key={idx} className="bg-slate-50 p-4 rounded-xl border border-blue-100 hover:border-blue-200 transition-all">
-                                                    <div className="space-y-2">
-                                                        <div className="flex items-start gap-2">
-                                                            <div className="p-1.5 bg-blue-50 rounded-lg flex-shrink-0">
-                                                                <BookMarked size={14} className="text-blue-600" />
-                                                            </div>
-                                                            <h4 className="text-xs font-black text-slate-900 leading-tight">{lesson.lesson}</h4>
-                                                        </div>
-                                                        
-                                                        {lesson.notes && (
-                                                            <div>
-                                                                <span className="text-[9px] font-bold text-slate-500 block mb-0.5">ملاحظات:</span>
-                                                                <p className="text-xs text-slate-700 bg-white p-2 rounded">{lesson.notes}</p>
-                                                            </div>
-                                                        )}
-                                                        
-                                                        {lesson.homework && (
-                                                            <div className="pt-1 border-t border-slate-200">
-                                                                <span className="text-[9px] font-bold text-amber-700 block mb-0.5">واجب:</span>
-                                                                <p className="text-xs text-amber-900 bg-amber-50 p-1.5 rounded">{lesson.homework}</p>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                    );
-                                })()}
                             </div>
 
                             {loggedInStudent.notes && (
@@ -1116,7 +1022,7 @@
                             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                                     <Award size={16} className="text-purple-600" />
-                                    <span>ملخص جلسات سرد يوم الأحد التثبيتية</span>
+                                    <span>ملخص جلسات سرد يوم الإثنين التثبيتية</span>
                                 </h3>
 
                                 <div className="p-4 bg-purple-50/50 rounded-xl border border-purple-100/30 flex justify-between items-center">
@@ -1136,7 +1042,7 @@
                                 ) : (
                                     <div className="space-y-4 relative border-r-2 border-indigo-100/60 mr-4 pr-6">
                                         {filteredHistory.map((session, index) => {
-                                            const sunday = isSunday(session.date);
+                                            const sardDay = isSardDay(session.date);
                                             return (
                                                 <div key={index} className="relative space-y-2">
                                                     <div className="absolute right-[-31px] top-1.5 w-4.5 h-4.5 rounded-full bg-indigo-50 border-2 border-indigo-500 flex items-center justify-center">
@@ -1145,11 +1051,11 @@
 
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-xs font-black text-indigo-600 font-mono bg-indigo-50 px-2.5 py-1 rounded-lg">
-                                                            {session.date}
+                                                            {formatDateWithWeekday(session.date)}
                                                         </span>
-                                                        {sunday && (
+                                                        {sardDay && (
                                                             <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
-                                                                جلسة سرد الأحد التثبيتية
+                                                                جلسة سرد الإثنين التثبيتية
                                                             </span>
                                                         )}
                                                         {session.attendance && (
@@ -1212,86 +1118,6 @@
                                     </div>
                                 )}
                             </div>
-
-                            {/* Lesson History Modal */}
-                            {showLessonHistory && (
-                                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                                        <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
-                                            <h2 className="text-xl font-black text-slate-900">سجل الدروس</h2>
-                                            <button
-                                                onClick={() => setShowLessonHistory(false)}
-                                                className="text-slate-500 hover:text-slate-700 text-2xl font-bold leading-none"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                        <div className="p-6 space-y-4">
-                                            {(() => {
-                                                // Determine which lesson groups to show
-                                                const lessonGroupsToShow = studentGroup === 'نخبة١' 
-                                                    ? ['نخبة١', 'نخبة٢']
-                                                    : ['نخبة٢'];
-                                                
-                                                // Collect all dates from visible groups
-                                                const allDatesMap = {};
-                                                lessonGroupsToShow.forEach(group => {
-                                                    if (data.lessons && data.lessons[group]) {
-                                                        Object.keys(data.lessons[group]).forEach(date => {
-                                                            if (!allDatesMap[date]) {
-                                                                allDatesMap[date] = {};
-                                                            }
-                                                            allDatesMap[date][group] = data.lessons[group][date];
-                                                        });
-                                                    }
-                                                });
-                                                
-                                                const sortedDates = Object.keys(allDatesMap).sort().reverse();
-                                                
-                                                if (sortedDates.length === 0) {
-                                                    return <p className="text-slate-500 text-center py-8">لا توجد دروس مسجلة</p>;
-                                                }
-                                                
-                                                return sortedDates.map((date) => (
-                                                    <div key={date} className="border border-slate-200 rounded-xl p-4 space-y-3">
-                                                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                                                            <Calendar size={14} className="text-blue-600" />
-                                                            <span>{date}</span>
-                                                        </h3>
-                                                        <div className="space-y-2 ml-6">
-                                                            {Object.keys(allDatesMap[date]).map((group) => (
-                                                                <div key={group}>
-                                                                    {allDatesMap[date][group].length > 0 && (
-                                                                        <div className="text-xs font-bold text-slate-500 mb-2">{group}</div>
-                                                                    )}
-                                                                    {allDatesMap[date][group].map((lesson, idx) => (
-                                                                        <div key={idx} className="bg-slate-50 p-3 rounded-lg border border-slate-100 mb-2">
-                                                                            <div className="flex items-start gap-2 mb-2">
-                                                                                <BookMarked size={12} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                                                                                <h4 className="text-xs font-bold text-slate-900">{lesson.lesson}</h4>
-                                                                            </div>
-                                                                            {lesson.notes && (
-                                                                                <div className="text-[11px] text-slate-600 ml-6 mb-1">
-                                                                                    <span className="font-bold text-slate-500">ملاحظات: </span>{lesson.notes}
-                                                                                </div>
-                                                                            )}
-                                                                            {lesson.homework && (
-                                                                                <div className="text-[11px] text-amber-800 ml-6 bg-amber-50 p-1.5 rounded">
-                                                                                    <span className="font-bold">واجب: </span>{lesson.homework}
-                                                                                </div>
-                                                                            )}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ));
-                                            })()}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                         </main>
                     </div>
@@ -1363,7 +1189,7 @@
                                 <div className="flex items-center gap-2">
                                     <h1 className="text-xl font-black tracking-tight text-slate-900">متابعة التسميع</h1>
                                     <span className="text-[10px] bg-indigo-50 text-indigo-600 border border-indigo-100/50 px-2.5 py-0.5 rounded-full font-bold">
-                                        {currentUserRole === 'admin' ? 'الإدارة العامة' : currentUserRole === 'nokhba1' ? 'إشراف نخبة ١' : 'إشراف نخبة ٢'}
+                                        {currentUserRole === 'admin' ? 'الإدارة العامة' : 'طالب'}
                                     </span>
                                 </div>
                                 <p className="text-xs text-slate-400 font-medium mt-0.5">لوحة التحكم، الإحصائيات الفورية، والمتابعة التفاعلية للأجزاء</p>
@@ -1496,22 +1322,6 @@
                             
                             {/* LEFT AREA: DASHBOARD OR JSON WORKSPACE */}
                             <div className={`lg:col-span-12 space-y-6 ${activeTab === 'editor' ? 'hidden' : 'block'}`}>
-                                
-                                {/* --- LESSON RECORD BUTTONS --- */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <button
-                                        onClick={() => setShowLessonHistoryNokhba1(true)}
-                                        className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl text-sm transition-all shadow-md hover:shadow-lg"
-                                    >
-                                        انظر سجل دروس نخبة١
-                                    </button>
-                                    <button
-                                        onClick={() => setShowLessonHistoryNokhba2(true)}
-                                        className="w-full px-6 py-4 bg-blue-600 hover:bg-blue-700 text-white font-black rounded-2xl text-sm transition-all shadow-md hover:shadow-lg"
-                                    >
-                                        انظر سجل دروس نخبة٢
-                                    </button>
-                                </div>
                                 
                                 {/* --- TOP 3 KPI CARDS - DYNAMICALLY TIED TO ACTIVE FILTERS --- */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -1650,7 +1460,7 @@
                                     
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] text-slate-400 font-bold bg-slate-100 px-3 py-1 rounded-lg">
-                                            التصفية مفعلة لـ {OFFICIAL_RECITATION_DATES.filter(isDateInRange).length} جلسة رسمية ضمن النطاق المختار
+                                            التصفية مفعلة لـ {expectedDaysInRange} جلسة رسمية ضمن النطاق المختار
                                         </span>
                                         {processedStudents.length === 0 && (
                                             <span className="text-xs text-red-500 font-bold bg-red-50 px-3 py-1 rounded-full border border-red-100">
@@ -1665,8 +1475,8 @@
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {processedStudents.map((student) => {
                                         const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
-                                        const sundaySessions = filteredHistory.filter(session => isSunday(session.date));
-                                        const weekdaySessions = filteredHistory.filter(session => !isSunday(session.date));
+                                        const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
+                                        const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
                                         const summarizeRaw = (sessions, category) => {
                                             const activeItems = sessions.map(s => s[category]).filter(Boolean);
@@ -1699,13 +1509,13 @@
                                         const currentReviewPages = totalReviewPagesInRange > 0 ? totalReviewPagesInRange.toFixed(1) : '0.0';
                                         const currentReviewGrade = calculateMeanGrade(weekdaySessions, 'review');
 
-                                        const totalSardNewPages = sundaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
-                                        const currentSardNewRaw = summarizeRaw(sundaySessions, 'new');
+                                        const totalSardNewPages = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                                        const currentSardNewRaw = summarizeRaw(sardSessions, 'new');
                                         const currentSardNewPages = totalSardNewPages > 0 ? totalSardNewPages.toFixed(1) : '0.0';
-                                        const currentSardGrade = calculateMeanGrade(sundaySessions, 'new');
-                                        const totalSardSessions = sundaySessions.length;
+                                        const currentSardGrade = calculateMeanGrade(sardSessions, 'new');
+                                        const totalSardSessions = sardSessions.length;
 
-                                        const studentGroup = student.group || student.level || 'نخبة١';
+                                        const studentGroup = student.group || student.level || '---';
                                         const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
 
                                         const progressPercentage = targetPages > 0 
@@ -1713,7 +1523,7 @@
                                             : 100;
 
                                                     const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
-                                                    const expectedDays = OFFICIAL_RECITATION_DATES.filter(date => date >= startDate && date <= endDate).length;
+                                                    const expectedDays = expectedDaysInRange;
 
                                                     return (
                                                         <div 
@@ -1737,16 +1547,6 @@
                                                         {student.name}
                                                     </h3>
 
-                                                    {student.warnings && WARNING_TYPES.some(t => (student.warnings[t] || 0) > 0) && (
-                                                        <div className="flex flex-wrap gap-1 mb-3">
-                                                            {WARNING_TYPES.filter(t => (student.warnings[t] || 0) > 0).map(type => (
-                                                                <span key={type} className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${getWarningStyle(type).pill}`}>
-                                                                    {type}: {student.warnings[type]}
-                                                                </span>
-                                                            ))}
-                                                        </div>
-                                                    )}
-                                                    
                                                     <p className="text-[10px] text-slate-400 font-bold mb-4">
                                                         الهدف للحفظ الجديد في النطاق: <span className="text-slate-700 font-extrabold">{targetPages} صفحات</span>
                                                     </p>
@@ -1797,12 +1597,12 @@
                                                         </div>
                                                     </div>
 
-                                                    {/* Premium Sard Section (Sundays) */}
+                                                    {/* Sard Section (Mondays) */}
                                                     <div>
                                                         <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
                                                             <div className="flex items-center gap-1">
                                                                 <Award size={13} className="text-purple-500" />
-                                                                <span className="text-purple-600 font-bold">سرد (الأحد)</span>
+                                                                <span className="text-purple-600 font-bold">سرد (الإثنين)</span>
                                                             </div>
                                                             {currentSardGrade && (
                                                                 <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentSardGrade)}`}>
@@ -1872,27 +1672,26 @@
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الهدف</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الإنجاز</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الحضور</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">التحذيرات</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
                                                 {processedStudents.map((student, index) => {
                                                     const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
-                                                    const sundaySessions = filteredHistory.filter(session => isSunday(session.date));
-                                                    const weekdaySessions = filteredHistory.filter(session => !isSunday(session.date));
+                                                    const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
+                                                    const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
                                                     const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
                                                     const totalReviewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                                                    const totalSardNewPages = sundaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                                                    const totalSardNewPages = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
 
-                                                    const studentGroup = student.group || student.level || 'نخبة١';
+                                                    const studentGroup = student.group || student.level || '---';
                                                     const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
                                                     const progressPercentage = targetPages > 0 
                                                         ? Math.min(100, Math.round((totalNewPagesInRange / targetPages) * 100)) 
                                                         : 100;
 
-                                                    const attendedDays = (student.history || []).filter(session => isDateInRange(session.date) && session.attendance?.present).length;
-                                                    const expectedDays = OFFICIAL_RECITATION_DATES.filter(date => date >= startDate && date <= endDate).length;
+                                                    const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
+                                                    const expectedDays = expectedDaysInRange;
 
                                                     return (
                                                         <tr 
@@ -1943,18 +1742,6 @@
                                                                     {attendedDays}/{expectedDays}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-4 py-3">
-                                                                <div className="flex flex-wrap gap-1">
-                                                                    {student.warnings && WARNING_TYPES.some(t => (student.warnings[t] || 0) > 0)
-                                                                        ? WARNING_TYPES.filter(t => (student.warnings[t] || 0) > 0).map(type => (
-                                                                            <span key={type} className={`px-2 py-0.5 rounded-full text-[10px] font-black border ${getWarningStyle(type).pill}`}>
-                                                                                {type}: {student.warnings[type]}
-                                                                            </span>
-                                                                        ))
-                                                                        : <span className="text-[10px] text-slate-300 font-bold">—</span>
-                                                                    }
-                                                                </div>
-                                                            </td>
                                                         </tr>
                                                     );
                                                 })}
@@ -1965,119 +1752,6 @@
                                 )}
 
                             </div>
-
-                            {/* --- ADMIN LESSON HISTORY MODALS --- */}
-                            {showLessonHistoryNokhba1 && (
-                                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                                        <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
-                                            <h2 className="text-xl font-black text-slate-900">سجل دروس نخبة١</h2>
-                                            <button
-                                                onClick={() => setShowLessonHistoryNokhba1(false)}
-                                                className="text-slate-500 hover:text-slate-700 text-2xl font-bold leading-none"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                        <div className="p-6 space-y-4">
-                                            {(() => {
-                                                const allLessonDates = data.lessons && data.lessons['نخبة١'] 
-                                                    ? Object.keys(data.lessons['نخبة١']).sort().reverse()
-                                                    : [];
-                                                
-                                                if (allLessonDates.length === 0) {
-                                                    return <p className="text-slate-500 text-center py-8">لا توجد دروس مسجلة</p>;
-                                                }
-                                                
-                                                return allLessonDates.map((date) => (
-                                                    <div key={date} className="border border-slate-200 rounded-xl p-4 space-y-3">
-                                                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                                                            <Calendar size={14} className="text-blue-600" />
-                                                            <span>{date}</span>
-                                                        </h3>
-                                                        <div className="space-y-2 ml-6">
-                                                            {data.lessons['نخبة١'][date].map((lesson, idx) => (
-                                                                <div key={idx} className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                                                    <div className="flex items-start gap-2 mb-2">
-                                                                        <BookMarked size={12} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                                                                        <h4 className="text-xs font-bold text-slate-900">{lesson.lesson}</h4>
-                                                                    </div>
-                                                                    {lesson.notes && (
-                                                                        <div className="text-[11px] text-slate-600 ml-6 mb-1">
-                                                                            <span className="font-bold text-slate-500">ملاحظات: </span>{lesson.notes}
-                                                                        </div>
-                                                                    )}
-                                                                    {lesson.homework && (
-                                                                        <div className="text-[11px] text-amber-800 ml-6 bg-amber-50 p-1.5 rounded">
-                                                                            <span className="font-bold">واجب: </span>{lesson.homework}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ));
-                                            })()}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {showLessonHistoryNokhba2 && (
-                                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                                    <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[80vh] overflow-y-auto">
-                                        <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
-                                            <h2 className="text-xl font-black text-slate-900">سجل دروس نخبة٢</h2>
-                                            <button
-                                                onClick={() => setShowLessonHistoryNokhba2(false)}
-                                                className="text-slate-500 hover:text-slate-700 text-2xl font-bold leading-none"
-                                            >
-                                                ×
-                                            </button>
-                                        </div>
-                                        <div className="p-6 space-y-4">
-                                            {(() => {
-                                                const allLessonDates = data.lessons && data.lessons['نخبة٢'] 
-                                                    ? Object.keys(data.lessons['نخبة٢']).sort().reverse()
-                                                    : [];
-                                                
-                                                if (allLessonDates.length === 0) {
-                                                    return <p className="text-slate-500 text-center py-8">لا توجد دروس مسجلة</p>;
-                                                }
-                                                
-                                                return allLessonDates.map((date) => (
-                                                    <div key={date} className="border border-slate-200 rounded-xl p-4 space-y-3">
-                                                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
-                                                            <Calendar size={14} className="text-blue-600" />
-                                                            <span>{date}</span>
-                                                        </h3>
-                                                        <div className="space-y-2 ml-6">
-                                                            {data.lessons['نخبة٢'][date].map((lesson, idx) => (
-                                                                <div key={idx} className="bg-slate-50 p-3 rounded-lg border border-slate-100">
-                                                                    <div className="flex items-start gap-2 mb-2">
-                                                                        <BookMarked size={12} className="text-blue-600 flex-shrink-0 mt-0.5" />
-                                                                        <h4 className="text-xs font-bold text-slate-900">{lesson.lesson}</h4>
-                                                                    </div>
-                                                                    {lesson.notes && (
-                                                                        <div className="text-[11px] text-slate-600 ml-6 mb-1">
-                                                                            <span className="font-bold text-slate-500">ملاحظات: </span>{lesson.notes}
-                                                                        </div>
-                                                                    )}
-                                                                    {lesson.homework && (
-                                                                        <div className="text-[11px] text-amber-800 ml-6 bg-amber-50 p-1.5 rounded">
-                                                                            <span className="font-bold">واجب: </span>{lesson.homework}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            ))}
-                                                        </div>
-                                                    </div>
-                                                ));
-                                            })()}
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                             {/* ACTIVE TAB: EDITOR ONLY PANEL VIEW */}
                             {currentUserRole === 'admin' && (
@@ -2199,7 +1873,7 @@
                                         <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs font-semibold rounded-2xl flex items-center gap-2">
                                             <Calendar size={16} className="text-amber-600 flex-shrink-0" />
                                             <span>
-                                                النتائج المذكورة بالأسفل مصفاة حالياً لتشمل الفترة المحددة: من <strong>{startDate}</strong> إلى <strong>{endDate}</strong> (شاملة).
+                                                النتائج المذكورة بالأسفل مصفاة حالياً لتشمل الفترة المحددة: من <strong>{formatDateWithWeekday(startDate)}</strong> إلى <strong>{formatDateWithWeekday(endDate)}</strong> (شاملة).
                                             </span>
                                         </div>
 
@@ -2240,7 +1914,7 @@
                                             ) : (
                                                 <div className="space-y-4 relative border-r-2 border-indigo-100/60 mr-4 pr-6">
                                                     {filteredHistory.map((session, index) => {
-                                                        const sunday = isSunday(session.date);
+                                                        const sardDay = isSardDay(session.date);
                                                         return (
                                                             <div key={index} className="relative space-y-2">
                                                                 <div className="absolute right-[-31px] top-1.5 w-4.5 h-4.5 rounded-full bg-indigo-50 border-2 border-indigo-500 flex items-center justify-center">
@@ -2250,9 +1924,9 @@
                                                                 <div className="flex items-center justify-between">
                                                                     <div className="flex items-center gap-2">
                                                                         <span className="text-xs font-black text-indigo-600 font-mono bg-indigo-50 px-2.5 py-1 rounded-lg">
-                                                                            {session.date}
+                                                                            {formatDateWithWeekday(session.date)}
                                                                         </span>
-                                                                        {sunday && (
+                                                                        {sardDay && (
                                                                             <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
                                                                                 جلسة سرد
                                                                             </span>
@@ -2537,20 +2211,9 @@
                                             onChange={(e) => setNewStudentGroup(e.target.value)}
                                             className="w-full p-3 rounded-xl border border-slate-200 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-emerald-100"
                                         >
-                                            <option value="نخبة١">نخبة١ (الهدف: 8 صفحات/أسبوع)</option>
-                                            <option value="نخبة٢">نخبة٢ (الهدف: 4 صفحات/أسبوع)</option>
+                                            <option value="صغرى">صغرى</option>
+                                            <option value="كبرى">كبرى</option>
                                         </select>
-                                    </div>
-
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-black text-slate-600">معدل حضور البدء (تلقائي):</label>
-                                        <input 
-                                            type="text"
-                                            value={newStudentAttendance}
-                                            onChange={(e) => setNewStudentAttendance(e.target.value)}
-                                            placeholder="حضر 1 / 27"
-                                            className="w-full p-3 rounded-xl border border-slate-100 bg-slate-50 text-xs text-slate-500 font-bold focus:outline-none cursor-not-allowed"
-                                        />
                                     </div>
 
                                 </div>
