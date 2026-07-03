@@ -270,6 +270,11 @@
             if (dateStr === FIRST_RECITATION_DATE) return false;
             return getDayOfWeek(dateStr) === 1; // Monday
         };
+        const isAttendancePresent = (attendance) => {
+            const status = (attendance?.status || '').trim();
+            if (status === 'لم يحضر بعذر') return false;
+            return Boolean(attendance?.present);
+        };
 
         const GRADE_VALUES = {
             "مقبول": 25,
@@ -581,7 +586,7 @@
                             const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
                             const jadidSessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                            const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
+                            const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
                             const absences = Math.max(0, expectedDaysInRange - attendedDays);
 
                             const totalJadidPages = jadidSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
@@ -953,7 +958,7 @@
                     ? Math.min(100, Math.round((totalNewPages / targetPages) * 100)) 
                     : 100;
 
-                const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
+                const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
                 const expectedDays = expectedDaysInRange;
 
                 return (
@@ -1126,7 +1131,7 @@
                                                         )}
                                                         {session.attendance && (
                                                             <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
-                                                                session.attendance.present 
+                                                                isAttendancePresent(session.attendance)
                                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                                                                     : 'bg-red-50 text-red-700 border-red-100'
                                                             }`}>
@@ -1589,7 +1594,7 @@
                                             ? Math.min(100, Math.round((totalNewPagesInRange / targetPages) * 100)) 
                                             : 100;
 
-                                                    const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
+                                                    const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
                                                     const expectedDays = expectedDaysInRange;
 
                                                     return (
@@ -1757,7 +1762,7 @@
                                                         ? Math.min(100, Math.round((totalNewPagesInRange / targetPages) * 100)) 
                                                         : 100;
 
-                                                    const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
+                                                    const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
                                                     const expectedDays = expectedDaysInRange;
 
                                                     return (
@@ -2000,7 +2005,7 @@
                                                                         )}
                                                                         {session.attendance && (
                                                                             <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
-                                                                                session.attendance.present 
+                                                                                isAttendancePresent(session.attendance)
                                                                                     ? 'bg-emerald-50 text-emerald-700 border-emerald-100' 
                                                                                     : 'bg-red-50 text-red-700 border-red-100'
                                                                             }`}>
