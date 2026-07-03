@@ -271,8 +271,14 @@
             return getDayOfWeek(dateStr) === 1; // Monday
         };
         const isAttendancePresent = (attendance) => {
-            const status = (attendance?.status || '').trim();
-            if (status === 'لم يحضر بعذر' || status === 'لم يحضر بدون عذر') return false;
+            const status = (attendance?.status || '')
+                .normalize('NFKC')
+                .replace(/[\u064B-\u065F\u0670]/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            // Any explicit absence wording should be counted as absent, regardless of present flag.
+            if (status.includes('لم يحضر') || status.includes('غاب') || status.includes('غياب')) return false;
             return Boolean(attendance?.present);
         };
 
