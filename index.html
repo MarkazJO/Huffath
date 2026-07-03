@@ -351,19 +351,27 @@
         };
 
         const calculateAverageGradeValue = (sessions, category) => {
-            const activeGrades = sessions
-                .map(s => s[category]?.grade)
-                .filter(Boolean);
-
-            if (activeGrades.length === 0) return 0;
+            const activeItems = sessions.map(s => s[category]).filter(Boolean);
+            if (activeItems.length === 0) return 0;
 
             let sum = 0;
             let count = 0;
 
-            activeGrades.forEach(gradeStr => {
-                const trimmed = gradeStr.trim();
-                if (GRADE_VALUES[trimmed] !== undefined) {
-                    sum += GRADE_VALUES[trimmed];
+            activeItems.forEach(item => {
+                const gradeStr = (item.grade || '').trim();
+                if (!gradeStr) {
+                    // Confirmed rule: missing grade is treated as 50%.
+                    sum += 50;
+                    count++;
+                    return;
+                }
+
+                if (GRADE_VALUES[gradeStr] !== undefined) {
+                    sum += GRADE_VALUES[gradeStr];
+                    count++;
+                } else {
+                    // Unknown grade text also defaults to 50% to keep scoring deterministic.
+                    sum += 50;
                     count++;
                 }
             });
@@ -592,7 +600,9 @@
                             const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
                             const jadidSessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                            const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
+                            const attendedDays = filteredHistory.filter(
+                                session => isOfficialRecitationDate(session.date) && isAttendancePresent(session.attendance)
+                            ).length;
                             const absences = Math.max(0, expectedDaysInRange - attendedDays);
 
                             const totalJadidPages = jadidSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
