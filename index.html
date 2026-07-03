@@ -339,6 +339,28 @@
             return VALUE_TO_GRADE[roundedValue];
         };
 
+        const calculateAverageGradeValue = (sessions, category) => {
+            const activeGrades = sessions
+                .map(s => s[category]?.grade)
+                .filter(Boolean);
+
+            if (activeGrades.length === 0) return 0;
+
+            let sum = 0;
+            let count = 0;
+
+            activeGrades.forEach(gradeStr => {
+                const trimmed = gradeStr.trim();
+                if (GRADE_VALUES[trimmed] !== undefined) {
+                    sum += GRADE_VALUES[trimmed];
+                    count++;
+                }
+            });
+
+            if (count === 0) return 0;
+            return sum / count;
+        };
+
         const initialData = {
             "generatedAt": null,
             "version": 1,
@@ -553,6 +575,35 @@
                     )
                     : null;
 
+                const compositeByStudentId = sortBy === 'composite-criteria'
+                    ? new Map(
+                        list.map(student => {
+                            const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
+                            const jadidSessions = filteredHistory.filter(session => !isSardDay(session.date));
+
+                            const attendedDays = filteredHistory.filter(session => session.attendance?.present).length;
+                            const absences = Math.max(0, expectedDaysInRange - attendedDays);
+
+                            const totalJadidPages = jadidSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                            const avgJadidGradeValue = calculateAverageGradeValue(jadidSessions, 'new');
+                            const jadidComposite = totalJadidPages * avgJadidGradeValue;
+
+                            const totalReviewPages = jadidSessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                            const avgReviewGradeValue = calculateAverageGradeValue(jadidSessions, 'review');
+                            const reviewComposite = totalReviewPages * avgReviewGradeValue;
+
+                            return [
+                                student.id,
+                                {
+                                    absences,
+                                    jadidComposite,
+                                    reviewComposite
+                                }
+                            ];
+                        })
+                    )
+                    : null;
+
                 list.sort((a, b) => {
                     if (sortBy === 'name-asc') {
                         return a.name.localeCompare(b.name, 'ar');
@@ -563,11 +614,26 @@
                     if (sortBy === 'pages-desc') {
                         return (pagesByStudentId.get(b.id) || 0) - (pagesByStudentId.get(a.id) || 0);
                     }
+                    if (sortBy === 'composite-criteria') {
+                        const aMetrics = compositeByStudentId.get(a.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0 };
+                        const bMetrics = compositeByStudentId.get(b.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0 };
+
+                        if (aMetrics.absences !== bMetrics.absences) {
+                            return aMetrics.absences - bMetrics.absences;
+                        }
+                        if (aMetrics.jadidComposite !== bMetrics.jadidComposite) {
+                            return bMetrics.jadidComposite - aMetrics.jadidComposite;
+                        }
+                        if (aMetrics.reviewComposite !== bMetrics.reviewComposite) {
+                            return bMetrics.reviewComposite - aMetrics.reviewComposite;
+                        }
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
                     return 0;
                 });
 
                 return list;
-            }, [data.students, searchQuery, selectedLevel, sortBy, startDate, endDate]);
+            }, [data.students, searchQuery, selectedLevel, sortBy, startDate, endDate, expectedDaysInRange]);
 
             // Consolidated analytical KPI stats (Filtered)
             const overallMetrics = useMemo(() => {
@@ -1442,6 +1508,7 @@
                                                 onChange={(e) => setSortBy(e.target.value)}
                                                 className="bg-[#F8FAFC] border border-slate-100 hover:bg-slate-50 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 focus:outline-none"
                                             >
+                                                <option value="composite-criteria">معايير مركبة</option>
                                                 <option value="name-asc">الاسم (أ - ي)</option>
                                                 <option value="name-desc">الاسم (ي - أ)</option>
                                                 <option value="pages-desc">الأعلى إنجازاً بالصفحات (خلال النطاق)</option>
