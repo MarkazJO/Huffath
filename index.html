@@ -272,7 +272,7 @@
         };
         const isAttendancePresent = (attendance) => {
             const status = (attendance?.status || '').trim();
-            if (status === 'لم يحضر بعذر') return false;
+            if (status === 'لم يحضر بعذر' || status === 'لم يحضر بدون عذر') return false;
             return Boolean(attendance?.present);
         };
 
