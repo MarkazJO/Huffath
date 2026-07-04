@@ -612,13 +612,15 @@
                             const totalReviewPages = jadidSessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
                             const avgReviewGradeValue = calculateAverageGradeValue(jadidSessions, 'review');
                             const reviewComposite = totalReviewPages * avgReviewGradeValue;
+                            const hasReviewActivity = totalReviewPages > 0 ? 1 : 0;
 
                             return [
                                 student.id,
                                 {
                                     absences,
                                     jadidComposite,
-                                    reviewComposite
+                                    reviewComposite,
+                                    hasReviewActivity
                                 }
                             ];
                         })
@@ -636,14 +638,17 @@
                         return (pagesByStudentId.get(b.id) || 0) - (pagesByStudentId.get(a.id) || 0);
                     }
                     if (sortBy === 'composite-criteria') {
-                        const aMetrics = compositeByStudentId.get(a.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0 };
-                        const bMetrics = compositeByStudentId.get(b.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0 };
+                        const aMetrics = compositeByStudentId.get(a.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
+                        const bMetrics = compositeByStudentId.get(b.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
 
                         if (aMetrics.absences !== bMetrics.absences) {
                             return aMetrics.absences - bMetrics.absences;
                         }
                         if (aMetrics.jadidComposite !== bMetrics.jadidComposite) {
                             return bMetrics.jadidComposite - aMetrics.jadidComposite;
+                        }
+                        if (aMetrics.hasReviewActivity !== bMetrics.hasReviewActivity) {
+                            return bMetrics.hasReviewActivity - aMetrics.hasReviewActivity;
                         }
                         if (aMetrics.reviewComposite !== bMetrics.reviewComposite) {
                             return bMetrics.reviewComposite - aMetrics.reviewComposite;
