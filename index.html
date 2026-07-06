@@ -2002,9 +2002,18 @@
                     {/* --- MODAL 1: STUDENT HISTORY TIMELINE VIEW --- */}
                     {selectedStudent && (() => {
                         const totalHistory = selectedStudent.history || [];
-                        const filteredHistory = totalHistory.filter(session => isDateInRange(session.date));
+                        const totalHistoryWithIndex = totalHistory.map((session, idx) => ({ session, idx }));
+                        const splitStats = getSessionSplitStatsByIndex(totalHistory);
+                        const filteredEntries = totalHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
+                        const filteredHistory = filteredEntries.map(({ session }) => session);
+                        const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
+                        const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                        const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                        const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
                         const studentGroup = selectedStudent.group || selectedStudent.level || '---';
                         const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
+                        const currentNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.jadidBounds || null), null));
+                        const currentSardNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.sardBounds || null), null));
                         
                         return (
                             <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2049,7 +2058,7 @@
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">حفظ جديد بالنطاق</span>
                                                     <span className="sm:text-lg md:text-2xl font-black text-indigo-600 font-mono">
-                                                    {filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0).toFixed(1)}
+                                                    {totalNewPagesInRange.toFixed(1)}
                                                     </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة فعلية</span>
                                             </div>
@@ -2065,7 +2074,7 @@
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">مراجعة بالنطاق</span>
                                                 <span className="sm:text-lg md:text-2xl font-black text-sky-600 font-mono">
-                                                    {filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0).toFixed(1)}
+                                                    {totalReviewPagesInRange.toFixed(1)}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة</span>
                                             </div>
