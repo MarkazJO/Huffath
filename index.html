@@ -520,6 +520,7 @@
             const [jsonText, setJsonText] = useState(JSON.stringify(initialData, null, 2));
             const [jsonError, setJsonError] = useState(null);
             const [isLoading, setIsLoading] = useState(false);
+            const [hasReceivedInitialJson, setHasReceivedInitialJson] = useState(false);
             const [showTroubleshooting, setShowTroubleshooting] = useState(false);
             const [fetchErrorDetail, setFetchErrorDetail] = useState('');
             
@@ -579,6 +580,7 @@
                         if (parsedPayload && parsedPayload.students) {
                             console.log('🔄 Live data fetched from API:', parsedPayload);
                             updateMainData(parsedPayload);
+                            setHasReceivedInitialJson(true);
                             triggerNotification('تم تحديث البيانات المباشرة بنجاح!', 'success');
                             setFetchErrorDetail('');
                         } else {
@@ -999,6 +1001,28 @@
                 setShowAddStudentModal(false);
                 triggerNotification('تم إضافة الطالب الجديد لقائمة المتابعة');
             };
+
+            if (!hasReceivedInitialJson) {
+                return (
+                    <div className="min-h-screen bg-[#0F172A] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-indigo-500/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
+                        <div className="absolute bottom-0 left-0 w-[500px] h-[500px] bg-emerald-500/10 rounded-full blur-3xl -ml-32 -mb-32"></div>
+
+                        <div className="max-w-md w-full relative z-10">
+                            <div className="bg-slate-900 border border-slate-800/80 rounded-[2.5rem] p-8 space-y-6 shadow-2xl text-center">
+                                <div className="inline-flex p-3 bg-indigo-600 rounded-3xl text-white shadow-xl shadow-indigo-600/30">
+                                    <RefreshCw size={28} className="animate-spin" />
+                                </div>
+                                <h2 className="text-2xl font-black text-white leading-tight">متابعة التسميع والحفظ</h2>
+                                <p className="text-sm text-slate-300 font-bold">جاري تحميل البيانات...</p>
+                                <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
+                                    <div className="h-full w-1/2 bg-indigo-500 rounded-full animate-pulse"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
 
             // ==========================================
             // SUB-VIEW: LOGIN SPLASH SCREEN
