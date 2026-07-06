@@ -270,103 +270,6 @@
             if (dateStr === FIRST_RECITATION_DATE) return false;
             return getDayOfWeek(dateStr) === 1; // Monday
         };
-        const getPageBoundsFromSessionItem = (sessionItem) => {
-            if (!sessionItem) return null;
-
-            const start = Number(sessionItem.start);
-            const end = Number(sessionItem.end);
-
-            if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0) {
-                return {
-                    start: Math.min(start, end),
-                    end: Math.max(start, end)
-                };
-            }
-
-            return null;
-        };
-
-        const getBoundsFromPageSet = (pageSet) => {
-            if (!pageSet || pageSet.size === 0) return null;
-
-            let minPage = Infinity;
-            let maxPage = -Infinity;
-
-            pageSet.forEach(page => {
-                if (page < minPage) minPage = page;
-                if (page > maxPage) maxPage = page;
-            });
-
-            return { start: minPage, end: maxPage };
-        };
-
-        const mergeBounds = (currentBounds, incomingBounds) => {
-            if (!incomingBounds) return currentBounds;
-            if (!currentBounds) return { ...incomingBounds };
-
-            return {
-                start: Math.min(currentBounds.start, incomingBounds.start),
-                end: Math.max(currentBounds.end, incomingBounds.end)
-            };
-        };
-
-        const formatBounds = (bounds) => {
-            if (!bounds) return '---';
-            return bounds.start === bounds.end ? `${bounds.start}` : `${bounds.start}-${bounds.end}`;
-        };
-
-        const getSessionSplitStatsByIndex = (history = []) => {
-            const ordered = history
-                .map((session, idx) => ({ session, idx }))
-                .sort((a, b) => {
-                    const dateA = a.session?.date || '';
-                    const dateB = b.session?.date || '';
-                    if (dateA === dateB) return a.idx - b.idx;
-                    return dateA.localeCompare(dateB);
-                });
-
-            const previouslyRecitedAsJadid = new Set();
-            const stats = {};
-
-            ordered.forEach(({ session, idx }) => {
-                let jadidPages = 0;
-                let sardPages = 0;
-                let jadidBounds = null;
-                let sardBounds = null;
-
-                const newBounds = getPageBoundsFromSessionItem(session?.new);
-                if (newBounds) {
-                    const jadidPageSet = new Set();
-                    const sardPageSet = new Set();
-
-                    for (let page = newBounds.start; page <= newBounds.end; page += 1) {
-                        if (isSardDay(session?.date) && previouslyRecitedAsJadid.has(page)) {
-                            sardPageSet.add(page);
-                        } else {
-                            jadidPageSet.add(page);
-                        }
-                    }
-
-                    jadidPages = jadidPageSet.size;
-                    sardPages = sardPageSet.size;
-                    jadidBounds = getBoundsFromPageSet(jadidPageSet);
-                    sardBounds = getBoundsFromPageSet(sardPageSet);
-
-                    jadidPageSet.forEach(page => previouslyRecitedAsJadid.add(page));
-                } else {
-                    const fallbackNewPages = Number(session?.new?.pages || 0);
-                    if (isSardDay(session?.date)) {
-                        sardPages = fallbackNewPages;
-                    } else {
-                        jadidPages = fallbackNewPages;
-                    }
-                }
-
-                stats[idx] = { jadidPages, sardPages, jadidBounds, sardBounds };
-            });
-
-            return stats;
-        };
         const isAttendancePresent = (attendance) => {
             const status = (attendance?.status || '')
                 .normalize('NFKC')
@@ -664,37 +567,37 @@
 
                 const pagesByStudentId = sortBy === 'pages-desc'
                     ? new Map(
-                        list.map(student => {
-                            const splitStats = getSessionSplitStatsByIndex(student.history || []);
-                            const totalJadidPages = (student.history || []).reduce((acc, session, idx) => {
-                                if (!isDateInRange(session.date)) return acc;
-                                return acc + (splitStats[idx]?.jadidPages || 0);
-                            }, 0);
-
-                            return [student.id, totalJadidPages];
-                        })
+                        list.map(student => [
+                            student.id,
+                            (student.history || []).reduce((acc, session) => {
+                                if (isDateInRange(session.date)) {
+                                    // Count new pages from regular days and sard days together as jadid
+                                    return acc + (session.new?.pages || 0);
+                                }
+                                return acc;
+                            }, 0)
+                        ])
                     )
                     : null;
 
                 const compositeByStudentId = sortBy === 'composite-criteria'
                     ? new Map(
                         list.map(student => {
-                            const splitStats = getSessionSplitStatsByIndex(student.history || []);
-                            const historyWithIndex = (student.history || []).map((session, idx) => ({ session, idx }));
-                            const filteredEntries = historyWithIndex.filter(({ session }) => isDateInRange(session.date));
+                            const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
                             
-                            const jadidEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.jadidPages || 0) > 0);
+                            // Include regular new pages as well as sard day new pages as part of jadid composite metrics
+                            const jadidSessions = filteredHistory.filter(session => session.new?.pages > 0);
 
-                            const attendedDays = filteredEntries.filter(
-                                ({ session }) => isOfficialRecitationDate(session.date) && isAttendancePresent(session.attendance)
+                            const attendedDays = filteredHistory.filter(
+                                session => isOfficialRecitationDate(session.date) && isAttendancePresent(session.attendance)
                             ).length;
                             const absences = Math.max(0, expectedDaysInRange - attendedDays);
 
-                            const totalJadidPages = jadidEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
-                            const avgJadidGradeValue = calculateAverageGradeValue(jadidEntries.map(({ session }) => session), 'new');
+                            const totalJadidPages = jadidSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                            const avgJadidGradeValue = calculateAverageGradeValue(jadidSessions, 'new');
                             const jadidComposite = totalJadidPages * avgJadidGradeValue;
 
-                            const regularAndSardReview = filteredEntries.map(({ session }) => session).filter(session => session.review?.pages > 0);
+                            const regularAndSardReview = filteredHistory.filter(session => session.review?.pages > 0);
                             const totalReviewPages = regularAndSardReview.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
                             const avgReviewGradeValue = calculateAverageGradeValue(regularAndSardReview, 'review');
                             const reviewComposite = totalReviewPages * avgReviewGradeValue;
@@ -756,11 +659,10 @@
                     const studentGroup = student.group || student.level || '---';
                     totalTarget += calculateTargetPages(studentGroup, startDate, endDate);
 
-                    const splitStats = getSessionSplitStatsByIndex(student.history || []);
-                    (student.history || []).forEach((session, idx) => {
+                    student.history?.forEach(session => {
                         if (isDateInRange(session.date)) {
-                            if (splitStats[idx]?.jadidPages) {
-                                totalNew += splitStats[idx].jadidPages;
+                            if (session.new?.pages) {
+                                totalNew += parseFloat(session.new.pages);
                             }
                             if (session.review?.pages) {
                                 totalReview += parseFloat(session.review.pages);
@@ -1028,16 +930,18 @@
             if (currentUserRole === 'student' && loggedInStudent) {
                 const studentGroup = loggedInStudent.group || loggedInStudent.level || '---';
                 const studentHistory = loggedInStudent.history || [];
-                const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
-                const splitStats = getSessionSplitStatsByIndex(studentHistory);
-                const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
-                const filteredHistory = filteredEntries.map(({ session }) => session);
-                const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
+                const filteredHistory = studentHistory.filter(session => isDateInRange(session.date));
+                
+                const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
+                const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                const totalNewPages = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                // Unpack new pages from BOTH regular days and sard days into the final 'Jadid' calculation
+                const totalJadidFromRegular = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                const totalJadidFromSard = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                const totalNewPages = totalJadidFromRegular + totalJadidFromSard;
 
                 const totalReviewPages = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                const totalSardNew = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
+                const totalSardNew = totalJadidFromSard;
 
                 // Dynamic extraction of page ranges across all sessions containing new pages
                 const allSessionsWithNew = filteredHistory.filter(s => s.new?.start && s.new?.end);
@@ -1190,7 +1094,7 @@
                                 </h3>
 
                                 <div className="p-4 bg-purple-50/50 rounded-xl border border-purple-100/30 flex justify-between items-center">
-                                    <span className="text-xs font-bold text-purple-700">إجمالي صفحات السرد المنجزة:</span>
+                                    <span className="text-xs font-bold text-purple-700">إجمالي صفحات سرد الجديد المنجزة (محتسبة ضمن الجديد):</span>
                                     <span className="font-mono font-black text-purple-800 text-sm">{totalSardNew.toFixed(1)} ص</span>
                                 </div>
                             </div>
@@ -1634,6 +1538,10 @@
                                 {viewMode === 'grid' && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {processedStudents.map((student) => {
+                                        const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
+                                        const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
+                                        const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
+
                                         const summarizeRaw = (sessions, category) => {
                                             const activeItems = sessions.map(s => s[category]).filter(Boolean);
                                             if (activeItems.length === 0) return '---';
@@ -1654,17 +1562,15 @@
                                             return uniqueRaws.join(' ، ');
                                         };
 
-                                        const studentHistory = student.history || [];
-                                        const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
-                                        const splitStats = getSessionSplitStatsByIndex(studentHistory);
-                                        const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
-                                        const filteredHistory = filteredEntries.map(({ session }) => session);
-                                        const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                                        // Total Jadid includes regular new pages + sard day new pages
+                                        const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0) + 
+                                                                     sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
                                         
                                         const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
 
-                                        const allJadidSessions = filteredEntries.filter(({ idx }) => (splitStats[idx]?.jadidPages || 0) > 0).map(({ session }) => session);
-                                        const currentNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.jadidBounds || null), null));
+                                        // Form generalized raw summary for all new sessions combined
+                                        const allJadidSessions = filteredHistory.filter(session => session.new?.pages > 0);
+                                        const currentNewRaw = summarizeRaw(allJadidSessions, 'new');
                                         const currentNewPages = totalNewPagesInRange > 0 ? totalNewPagesInRange.toFixed(1) : '0.0';
                                         const currentNewGrade = calculateMeanGrade(allJadidSessions, 'new');
 
@@ -1673,12 +1579,11 @@
                                         const currentReviewPages = totalReviewPagesInRange > 0 ? totalReviewPagesInRange.toFixed(1) : '0.0';
                                         const currentReviewGrade = calculateMeanGrade(allReviewSessions, 'review');
 
-                                        const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
-                                        const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
-                                        const currentSardNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.sardBounds || null), null));
+                                        const totalSardNewPages = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                                        const currentSardNewRaw = summarizeRaw(sardSessions, 'new');
                                         const currentSardNewPages = totalSardNewPages > 0 ? totalSardNewPages.toFixed(1) : '0.0';
-                                        const currentSardGrade = calculateMeanGrade(sardEntries.map(({ session }) => session), 'new');
-                                        const totalSardSessions = sardEntries.length;
+                                        const currentSardGrade = calculateMeanGrade(sardSessions, 'new');
+                                        const totalSardSessions = sardSessions.length;
 
                                         const studentGroup = student.group || student.level || '---';
                                         const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
@@ -1841,16 +1746,14 @@
                                             </thead>
                                             <tbody>
                                                 {processedStudents.map((student, index) => {
-                                                    const studentHistory = student.history || [];
-                                                    const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
-                                                    const splitStats = getSessionSplitStatsByIndex(studentHistory);
-                                                    const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
-                                                    const filteredHistory = filteredEntries.map(({ session }) => session);
-                                                    const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
+                                                    const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
+                                                    const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
+                                                    const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                                                    const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                                                    const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0) + 
+                                                                                 sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
                                                     const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                                                    const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
+                                                    const totalSardNewPages = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
 
                                                     const studentGroup = student.group || student.level || '---';
                                                     const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
@@ -2002,18 +1905,9 @@
                     {/* --- MODAL 1: STUDENT HISTORY TIMELINE VIEW --- */}
                     {selectedStudent && (() => {
                         const totalHistory = selectedStudent.history || [];
-                        const totalHistoryWithIndex = totalHistory.map((session, idx) => ({ session, idx }));
-                        const splitStats = getSessionSplitStatsByIndex(totalHistory);
-                        const filteredEntries = totalHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
-                        const filteredHistory = filteredEntries.map(({ session }) => session);
-                        const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
-                        const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
-                        const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                        const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
+                        const filteredHistory = totalHistory.filter(session => isDateInRange(session.date));
                         const studentGroup = selectedStudent.group || selectedStudent.level || '---';
                         const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
-                        const currentNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.jadidBounds || null), null));
-                        const currentSardNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.sardBounds || null), null));
                         
                         return (
                             <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2057,9 +1951,10 @@
                                         <div className="grid grid-cols-3 gap-4">
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">حفظ جديد بالنطاق</span>
-                                                    <span className="sm:text-lg md:text-2xl font-black text-indigo-600 font-mono">
-                                                    {totalNewPagesInRange.toFixed(1)}
-                                                    </span>
+                                                <span className="sm:text-lg md:text-2xl font-black text-indigo-600 font-mono">
+                                                    {/* Automatically includes regular days new pages + sard day new pages safely */}
+                                                    {filteredHistory.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0).toFixed(1)}
+                                                </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة فعلية</span>
                                             </div>
 
@@ -2074,7 +1969,7 @@
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">مراجعة بالنطاق</span>
                                                 <span className="sm:text-lg md:text-2xl font-black text-sky-600 font-mono">
-                                                    {totalReviewPagesInRange.toFixed(1)}
+                                                    {filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0).toFixed(1)}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة</span>
                                             </div>
@@ -2105,7 +2000,7 @@
                                                                         </span>
                                                                         {sardDay && (
                                                                             <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
-                                                                                السرد:
+                                                                                جلسة سرد الإثنين
                                                                             </span>
                                                                         )}
                                                                         {session.attendance && (
