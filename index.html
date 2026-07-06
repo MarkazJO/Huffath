@@ -20,7 +20,7 @@
     <!-- Google Fonts: Cairo -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght=300;400;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;800;900&display=swap" rel="stylesheet">
     
     <!-- React & Babel UMD CDNs -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -277,6 +277,7 @@
                 .replace(/\s+/g, ' ')
                 .trim();
 
+            // Any explicit absence wording should be counted as absent, regardless of present flag.
             if (status.includes('لم يحضر') || status.includes('غاب') || status.includes('غياب')) return false;
             return Boolean(attendance?.present);
         };
@@ -312,6 +313,7 @@
             }
         };
 
+        // Mathematical rounding logic for single average grades
         const calculateMeanGrade = (sessions, category) => {
             const activeGrades = sessions
                 .map(s => s[category]?.grade)
@@ -358,6 +360,7 @@
             activeItems.forEach(item => {
                 const gradeStr = (item.grade || '').trim();
                 if (!gradeStr) {
+                    // Confirmed rule: missing grade is treated as 50%.
                     sum += 50;
                     count++;
                     return;
@@ -367,6 +370,7 @@
                     sum += GRADE_VALUES[gradeStr];
                     count++;
                 } else {
+                    // Unknown grade text also defaults to 50% to keep scoring deterministic.
                     sum += 50;
                     count++;
                 }
@@ -474,14 +478,19 @@
                     });
             };
 
+
+
+            // Pull latest cloud changes automatically on bootstrap
             useEffect(() => {
                 loadLiveData();
             }, []);
 
+            // Log data object to console on every load/refresh
             useEffect(() => {
                 console.log('📊 JSON Data Object Updated:', data);
             }, [data]);
 
+            // Display floating notifications
             const triggerNotification = (message, type = 'success') => {
                 setNotification({ message, type });
                 setTimeout(() => {
@@ -489,12 +498,14 @@
                 }, 5000);
             };
 
+            // Sync structural state changes
             const updateMainData = (newData) => {
                 setData(newData);
                 setJsonText(JSON.stringify(newData, null, 2));
                 setJsonError(null);
             };
 
+            // Dynamic live JSON validator
             const handleJsonTextChange = (text) => {
                 setJsonText(text);
                 try {
@@ -510,6 +521,7 @@
                 }
             };
 
+            // Reset back to system baseline fallback
             const resetToDefault = () => {
                 setCustomConfirm({
                     message: 'هل أنت متأكد من رغبتك في إعادة تعيين البيانات الحالية إلى البيانات الافتراضية؟ سيفقد أي تقدم غير محفوظ بالسحابة.',
@@ -524,6 +536,7 @@
                 });
             };
 
+            // Inclusive range filter checker
             const isDateInRange = (dateStr) => {
                 if (!dateStr) return false;
                 return dateStr >= startDate && dateStr <= endDate;
@@ -533,6 +546,7 @@
                 return OFFICIAL_RECITATION_DATES.filter(date => date >= startDate && date <= endDate).length;
             }, [startDate, endDate]);
 
+            // Calculate student target expectation pages based on official schedule
             const calculateTargetPages = (groupName, start, end) => {
                 let targetSum = 0;
                 OFFICIAL_RECITATION_DATES.forEach((dateStr) => {
@@ -544,6 +558,7 @@
                 return targetSum;
             };
 
+            // Unique categories extracter
             const dynamicGroupsList = useMemo(() => {
                 if (!data.students) return [];
                 const groups = data.students.map(s => s.group || s.level).filter(Boolean);
@@ -571,7 +586,6 @@
                             student.id,
                             (student.history || []).reduce((acc, session) => {
                                 if (isDateInRange(session.date)) {
-                                    // Count new pages from regular days and sard days together as jadid
                                     return acc + (session.new?.pages || 0);
                                 }
                                 return acc;
@@ -584,9 +598,7 @@
                     ? new Map(
                         list.map(student => {
                             const filteredHistory = (student.history || []).filter(session => isDateInRange(session.date));
-                            
-                            // Include regular new pages as well as sard day new pages as part of jadid composite metrics
-                            const jadidSessions = filteredHistory.filter(session => session.new?.pages > 0);
+                            const jadidSessions = filteredHistory.filter(session => !isSardDay(session.date));
 
                             const attendedDays = filteredHistory.filter(
                                 session => isOfficialRecitationDate(session.date) && isAttendancePresent(session.attendance)
@@ -597,9 +609,8 @@
                             const avgJadidGradeValue = calculateAverageGradeValue(jadidSessions, 'new');
                             const jadidComposite = totalJadidPages * avgJadidGradeValue;
 
-                            const regularAndSardReview = filteredHistory.filter(session => session.review?.pages > 0);
-                            const totalReviewPages = regularAndSardReview.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                            const avgReviewGradeValue = calculateAverageGradeValue(regularAndSardReview, 'review');
+                            const totalReviewPages = jadidSessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                            const avgReviewGradeValue = calculateAverageGradeValue(jadidSessions, 'review');
                             const reviewComposite = totalReviewPages * avgReviewGradeValue;
                             const hasReviewActivity = totalReviewPages > 0 ? 1 : 0;
 
@@ -650,6 +661,7 @@
                 return list;
             }, [data.students, searchQuery, selectedLevel, sortBy, startDate, endDate, expectedDaysInRange]);
 
+            // Consolidated analytical KPI stats (Filtered)
             const overallMetrics = useMemo(() => {
                 let totalNew = 0;
                 let totalReview = 0;
@@ -681,6 +693,7 @@
                 };
             }, [processedStudents, startDate, endDate]);
 
+            // Role assigners
             const handleRoleLogin = (role) => {
                 setCurrentUserRole(role);
                 setIsLoggedIn(true);
@@ -691,6 +704,7 @@
                 triggerNotification(`مرحباً بك! تم تسجيل الدخول كـ ${role === 'admin' ? 'الإدارة العامة' : 'طالب'}`, 'success');
             };
 
+            // Intelligent student identity matcher
             const handleStudentNameLoginSubmit = (e) => {
                 e.preventDefault();
                 setStudentLoginError('');
@@ -875,7 +889,9 @@
                         <div className="max-w-md w-full relative z-10">
                             <div className="bg-slate-900 border border-slate-800/80 rounded-[2.5rem] p-8 space-y-6 shadow-2xl">
                                 <div className="text-center space-y-3 pb-2">
-                                    <div className="inline-flex p-3 bg-indigo-600 rounded-3xl text-white shadow-xl shadow-indigo-600/30 select-none">
+                                    <div 
+                                        className="inline-flex p-3 bg-indigo-600 rounded-3xl text-white shadow-xl shadow-indigo-600/30 select-none"
+                                    >
                                         <BookOpen size={28} className="animate-pulse" />
                                     </div>
                                     <h2 className="text-2xl font-black text-white leading-tight">متابعة التسميع والحفظ</h2>
@@ -935,22 +951,28 @@
                 const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
                 const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                // Unpack new pages from BOTH regular days and sard days into the final 'Jadid' calculation
-                const totalJadidFromRegular = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
-                const totalJadidFromSard = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
-                const totalNewPages = totalJadidFromRegular + totalJadidFromSard;
+                const sundayReviewPages = sardSessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                const totalNewPages = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0) + sundayReviewPages;
+                const totalReviewPages = weekdaySessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                const totalSardNew = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
 
-                const totalReviewPages = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
-                const totalSardNew = totalJadidFromSard;
+                // Calculate page range for new memorization
+                const newSessionsWithPages = weekdaySessions.filter(s => s.new?.start && s.new?.end);
+                const startPage = newSessionsWithPages.length > 0 
+                    ? Math.min(...newSessionsWithPages.map(s => s.new.start))
+                    : '-';
+                const endPage = newSessionsWithPages.length > 0
+                    ? Math.max(...newSessionsWithPages.map(s => s.new.end))
+                    : '-';
 
-                // Dynamic extraction of page ranges across all sessions containing new pages
-                const allSessionsWithNew = filteredHistory.filter(s => s.new?.start && s.new?.end);
-                const startPage = allSessionsWithNew.length > 0 ? Math.min(...allSessionsWithNew.map(s => s.new.start)) : '-';
-                const endPage = allSessionsWithNew.length > 0 ? Math.max(...allSessionsWithNew.map(s => s.new.end)) : '-';
-
-                const allSessionsWithReview = filteredHistory.filter(s => s.review?.start && s.review?.end);
-                const reviewStartPage = allSessionsWithReview.length > 0 ? Math.min(...allSessionsWithReview.map(s => s.review.start)) : '-';
-                const reviewEndPage = allSessionsWithReview.length > 0 ? Math.max(...allSessionsWithReview.map(s => s.review.end)) : '-';
+                // Calculate page range for review
+                const reviewSessionsWithPages = weekdaySessions.filter(s => s.review?.start && s.review?.end);
+                const reviewStartPage = reviewSessionsWithPages.length > 0
+                    ? Math.min(...reviewSessionsWithPages.map(s => s.review.start))
+                    : '-';
+                const reviewEndPage = reviewSessionsWithPages.length > 0
+                    ? Math.max(...reviewSessionsWithPages.map(s => s.review.end))
+                    : '-';
 
                 const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
                 const progressPercentage = targetPages > 0 
@@ -1087,6 +1109,8 @@
                                 </div>
                             </div>
 
+
+
                             <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm space-y-4">
                                 <h3 className="text-sm font-black text-slate-800 flex items-center gap-2">
                                     <Award size={16} className="text-purple-600" />
@@ -1094,7 +1118,7 @@
                                 </h3>
 
                                 <div className="p-4 bg-purple-50/50 rounded-xl border border-purple-100/30 flex justify-between items-center">
-                                    <span className="text-xs font-bold text-purple-700">إجمالي صفحات سرد الجديد المنجزة (محتسبة ضمن الجديد):</span>
+                                    <span className="text-xs font-bold text-purple-700">إجمالي صفحات سرد الجديد المنجزة:</span>
                                     <span className="font-mono font-black text-purple-800 text-sm">{totalSardNew.toFixed(1)} ص</span>
                                 </div>
                             </div>
@@ -1198,6 +1222,7 @@
             return (
                 <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-indigo-500 selection:text-white">
                     
+                    {/* Floating state actions */}
                     {notification && (
                         <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl transition-all transform duration-300 translate-y-0 scale-100 border text-sm font-bold ${
                             notification.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 
@@ -1247,7 +1272,9 @@
                     <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-md border-b border-slate-100 px-6 py-4 flex flex-col md:flex-row justify-between items-center gap-4">
                         
                         <div className="flex items-center gap-4 w-full md:w-auto">
-                            <div className="p-2.5 bg-[#0F172A] text-white rounded-2xl shadow-lg shadow-slate-900/10 select-none">
+                            <div 
+                                className="p-2.5 bg-[#0F172A] text-white rounded-2xl shadow-lg shadow-slate-900/10 select-none"
+                            >
                                 <BookOpen size={24} className="animate-pulse" />
                             </div>
                             <div>
@@ -1309,6 +1336,7 @@
                     {/* --- MAIN WORKSPACE --- */}
                     <main className="p-6 max-w-7xl mx-auto space-y-6">
 
+                        {/* --- GOOGLE SHEETS TROUBLESHOOTING --- */}
                         {showTroubleshooting && (
                             <div className="bg-amber-50 border border-amber-200 rounded-3xl p-6 space-y-4 animate-in slide-in-from-top-4 duration-300">
                                 <div className="flex justify-between items-start">
@@ -1337,7 +1365,7 @@
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-medium text-amber-950 mt-2">
                                     <div className="bg-white/60 p-4 rounded-2xl border border-amber-200/50 space-y-2">
-                                        <span className="font-bold text-amber-900 block">1. إعدادات النشر في Google Sheets (الأهم):</span>
+                                        <span className="font-bold text-amber-900 block">1. إعدادات النشن في Google Sheets (الأهم):</span>
                                         <p>في نافذة البرمجة Apps Script عند إنشاء نشر جديد <strong>New Deployment</strong>:</p>
                                         <ul className="list-disc list-inside space-y-1.5 mr-2 text-amber-800">
                                             <li>اضبط خيار <strong>Execute as</strong> (تشغيل كـ) على: <strong>"Me" (أنا)</strong>.</li>
@@ -1380,13 +1408,14 @@
                             </div>
                         )}
 
+                        {/* --- DYNAMIC COLLAPSED METRIC ALERT --- */}
                         {/* --- DUAL INTERACTIVE WORKSPACE --- */}
                         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
                             
                             {/* LEFT AREA: DASHBOARD OR JSON WORKSPACE */}
                             <div className={`lg:col-span-12 space-y-6 ${activeTab === 'editor' ? 'hidden' : 'block'}`}>
                                 
-                                {/* --- TOP 3 KPI CARDS --- */}
+                                {/* --- TOP 3 KPI CARDS - DYNAMICALLY TIED TO ACTIVE FILTERS --- */}
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                     
                                     <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition-all flex justify-between items-start h-36 group">
@@ -1534,7 +1563,7 @@
                                     </div>
                                 </div>
 
-                                {/* --- STUDENT CARDS GRID --- */}
+                                {/* --- STUDENT CARDS GRID MATCHING IMAGE DESIGN --- */}
                                 {viewMode === 'grid' && (
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                                     {processedStudents.map((student) => {
@@ -1562,22 +1591,16 @@
                                             return uniqueRaws.join(' ، ');
                                         };
 
-                                        // Total Jadid includes regular new pages + sard day new pages
-                                        const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0) + 
-                                                                     sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
-                                        
-                                        const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                                        const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                                        const totalReviewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
 
-                                        // Form generalized raw summary for all new sessions combined
-                                        const allJadidSessions = filteredHistory.filter(session => session.new?.pages > 0);
-                                        const currentNewRaw = summarizeRaw(allJadidSessions, 'new');
+                                        const currentNewRaw = summarizeRaw(weekdaySessions, 'new');
                                         const currentNewPages = totalNewPagesInRange > 0 ? totalNewPagesInRange.toFixed(1) : '0.0';
-                                        const currentNewGrade = calculateMeanGrade(allJadidSessions, 'new');
+                                        const currentNewGrade = calculateMeanGrade(weekdaySessions, 'new');
 
-                                        const allReviewSessions = filteredHistory.filter(session => session.review?.pages > 0);
-                                        const currentReviewRaw = summarizeRaw(allReviewSessions, 'review');
+                                        const currentReviewRaw = summarizeRaw(weekdaySessions, 'review');
                                         const currentReviewPages = totalReviewPagesInRange > 0 ? totalReviewPagesInRange.toFixed(1) : '0.0';
-                                        const currentReviewGrade = calculateMeanGrade(allReviewSessions, 'review');
+                                        const currentReviewGrade = calculateMeanGrade(weekdaySessions, 'review');
 
                                         const totalSardNewPages = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
                                         const currentSardNewRaw = summarizeRaw(sardSessions, 'new');
@@ -1592,112 +1615,112 @@
                                             ? Math.min(100, Math.round((totalNewPagesInRange / targetPages) * 100)) 
                                             : 100;
 
-                                        const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                                        const expectedDays = expectedDaysInRange;
+                                                    const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
+                                                    const expectedDays = expectedDaysInRange;
 
-                                        return (
-                                            <div 
-                                                key={student.id}
-                                                onClick={() => setSelectedStudent(student)}
-                                                className="bg-white p-6 rounded-[2.5rem] border border-slate-100/40 shadow-xs group cursor-pointer hover:shadow-md hover:border-indigo-100/50 transition-all"
-                                            >
-                                                <div className="flex justify-between items-center mb-6">
-                                                    <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100/70 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
-                                                        <span className="w-2.5 h-2.5 rounded-full bg-slate-200 group-hover:bg-indigo-400 transition-colors"></span>
-                                                    </div>
-                                                    
-                                                    <div className="flex gap-1.5 text-[10px] font-bold">
-                                                        <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100/30 font-black">
-                                                            {studentGroup}
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                <h3 className="text-lg font-black text-slate-800 group-hover:text-indigo-600 transition-colors mb-2 text-right">
-                                                    {student.name}
-                                                </h3>
-
-                                                <p className="text-[10px] text-slate-400 font-bold mb-4">
-                                                    الهدف للحفظ الجديد في النطاق: <span className="text-slate-700 font-extrabold">{targetPages} صفحات</span>
-                                                </p>
-
-                                                {/* New Memorization Section */}
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
-                                                        <div className="flex items-center gap-1">
-                                                            <BookOpen size={13} className="text-indigo-500" />
-                                                            <span className="text-slate-500">حفظ الجديد</span>
+                                                    return (
+                                                        <div 
+                                                            key={student.id}
+                                                            onClick={() => setSelectedStudent(student)}
+                                                            className="bg-white p-6 rounded-[2.5rem] border border-slate-100/40 shadow-xs group cursor-pointer hover:shadow-md hover:border-indigo-100/50 transition-all"
+                                                        >
+                                                            <div className="flex justify-between items-center mb-6">
+                                                        <div className="w-8 h-8 rounded-full bg-slate-50 border border-slate-100/70 flex items-center justify-center group-hover:bg-indigo-50 transition-colors">
+                                                            <span className="w-2.5 h-2.5 rounded-full bg-slate-200 group-hover:bg-indigo-400 transition-colors"></span>
                                                         </div>
-                                                        {currentNewGrade && (
-                                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentNewGrade)}`}>
-                                                                {currentNewGrade}
+                                                        
+                                                        <div className="flex gap-1.5 text-[10px] font-bold">
+                                                            <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100/30 font-black">
+                                                                {studentGroup}
                                                             </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors">
-                                                        <span className="text-xs font-black text-slate-700 font-mono truncate max-w-[150px]" title={currentNewRaw}>
-                                                            {currentNewRaw}
-                                                        </span>
-                                                        <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
-                                                            {currentNewPages} ص
-                                                        </span>
-                                                    </div>
-                                                </div>
-
-                                                {/* Review Section */}
-                                                <div className="mb-4">
-                                                    <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
-                                                        <div className="flex items-center gap-1">
-                                                            <TrendingUp size={13} className="text-sky-500" />
-                                                            <span className="text-slate-500">المراجعة</span>
                                                         </div>
-                                                        {currentReviewGrade && (
-                                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentReviewGrade)}`}>
-                                                                {currentReviewGrade}
-                                                            </span>
-                                                        )}
                                                     </div>
-                                                    <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors">
-                                                        <span className="text-xs font-black text-slate-400 font-mono truncate max-w-[150px]" title={currentReviewRaw}>
-                                                            {currentReviewRaw}
-                                                        </span>
-                                                        <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
-                                                            {currentReviewPages} ص
-                                                        </span>
-                                                    </div>
-                                                </div>
 
-                                                {/* Sard Section (Mondays) */}
-                                                <div>
-                                                    <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
-                                                        <div className="flex items-center gap-1">
-                                                            <Award size={13} className="text-purple-500" />
-                                                            <span className="text-purple-600 font-bold">سرد (الإثنين)</span>
-                                                        </div>
-                                                        {currentSardGrade && (
-                                                            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentSardGrade)}`}>
-                                                                {currentSardGrade}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                    <div className="bg-purple-50/40 rounded-2xl p-3 border border-purple-100/30 group-hover:bg-purple-50/70 transition-all space-y-1.5">
-                                                        {totalSardSessions === 0 ? (
-                                                            <p className="text-[10px] text-purple-400/80 font-bold text-center py-1">لا يوجد سرد مسجل في هذا النطاق</p>
-                                                        ) : (
-                                                            <div className="flex justify-between items-center text-[11px]">
-                                                                <span className="font-semibold text-purple-500">سرد الجديد:</span>
-                                                                <div className="flex items-center gap-2">
-                                                                    <span className="font-black text-slate-700 font-mono text-xs">{currentSardNewRaw}</span>
-                                                                    <span className="bg-purple-100/80 text-purple-800 border border-purple-200/50 px-2.5 py-0.5 rounded-lg text-[10px] font-black font-mono whitespace-nowrap">
-                                                                        {currentSardNewPages} ص
-                                                                    </span>
-                                                                </div>
+                                                    <h3 className="text-lg font-black text-slate-800 group-hover:text-indigo-600 transition-colors mb-2 text-right">
+                                                        {student.name}
+                                                    </h3>
+
+                                                    <p className="text-[10px] text-slate-400 font-bold mb-4">
+                                                        الهدف للحفظ الجديد في النطاق: <span className="text-slate-700 font-extrabold">{targetPages} صفحات</span>
+                                                    </p>
+
+                                                    {/* New Memorization Section */}
+                                                    <div className="mb-4">
+                                                        <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
+                                                            <div className="flex items-center gap-1">
+                                                                <BookOpen size={13} className="text-indigo-500" />
+                                                                <span className="text-slate-500">حفظ الجديد</span>
                                                             </div>
-                                                        )}
+                                                            {currentNewGrade && (
+                                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentNewGrade)}`}>
+                                                                    {currentNewGrade}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors">
+                                                            <span className="text-xs font-black text-slate-700 font-mono truncate max-w-[150px]" title={currentNewRaw}>
+                                                                {currentNewRaw}
+                                                            </span>
+                                                            <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
+                                                                {currentNewPages} ص
+                                                            </span>
+                                                        </div>
                                                     </div>
-                                                </div>
 
-                                                <div className="mt-4 pt-3 border-t border-slate-100/60 flex items-center justify-between text-[10px]">
+                                                    {/* Review Memorization Section */}
+                                                    <div className="mb-4">
+                                                        <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
+                                                            <div className="flex items-center gap-1">
+                                                                <TrendingUp size={13} className="text-sky-500" />
+                                                                <span className="text-slate-500">المراجعة (أيام التسميع)</span>
+                                                            </div>
+                                                            {currentReviewGrade && (
+                                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentReviewGrade)}`}>
+                                                                    {currentReviewGrade}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors">
+                                                            <span className="text-xs font-black text-slate-400 font-mono truncate max-w-[150px]" title={currentReviewRaw}>
+                                                                {currentReviewRaw}
+                                                            </span>
+                                                            <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
+                                                                {currentReviewPages} ص
+                                                            </span>
+                                                        </div>
+                                                    </div>
+
+                                                    {/* Sard Section (Mondays) */}
+                                                    <div>
+                                                        <div className="flex justify-between items-center text-xs text-slate-400 mb-2 font-semibold">
+                                                            <div className="flex items-center gap-1">
+                                                                <Award size={13} className="text-purple-500" />
+                                                                <span className="text-purple-600 font-bold">سرد (الإثنين)</span>
+                                                            </div>
+                                                            {currentSardGrade && (
+                                                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${getGradePillClass(currentSardGrade)}`}>
+                                                                    {currentSardGrade}
+                                                                </span>
+                                                            )}
+                                                        </div>
+                                                        <div className="bg-purple-50/40 rounded-2xl p-3 border border-purple-100/30 group-hover:bg-purple-50/70 transition-all space-y-1.5">
+                                                            {totalSardSessions === 0 ? (
+                                                                <p className="text-[10px] text-purple-400/80 font-bold text-center py-1">لا يوجد سرد مسجل في هذا النطاق</p>
+                                                            ) : (
+                                                                <div className="flex justify-between items-center text-[11px]">
+                                                                    <span className="font-semibold text-purple-500">سرد الجديد:</span>
+                                                                    <div className="flex items-center gap-2">
+                                                                        <span className="font-black text-slate-700 font-mono text-xs">{currentSardNewRaw}</span>
+                                                                        <span className="bg-purple-100/80 text-purple-800 border border-purple-200/50 px-2.5 py-0.5 rounded-lg text-[10px] font-black font-mono whitespace-nowrap">
+                                                                            {currentSardNewPages} ص
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="mt-4 pt-3 border-t border-slate-100/60 flex items-center justify-between text-[10px]">
                                                     <div className="flex items-center gap-2 text-slate-500 font-bold">
                                                         <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-lg border border-blue-100/50 font-black">
                                                             {attendedDays}/{expectedDays} حضور
@@ -1738,7 +1761,7 @@
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">المجموعة</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">حفظ جديد</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">مراجعة</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">سرد جديد</th>
+                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">سرد</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الهدف</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الإنجاز</th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الحضور</th>
@@ -1750,9 +1773,8 @@
                                                     const sardSessions = filteredHistory.filter(session => isSardDay(session.date));
                                                     const weekdaySessions = filteredHistory.filter(session => !isSardDay(session.date));
 
-                                                    const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0) + 
-                                                                                 sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
-                                                    const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                                                    const totalNewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
+                                                    const totalReviewPagesInRange = weekdaySessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
                                                     const totalSardNewPages = sardSessions.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0);
 
                                                     const studentGroup = student.group || student.level || '---';
@@ -1952,7 +1974,6 @@
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">حفظ جديد بالنطاق</span>
                                                 <span className="sm:text-lg md:text-2xl font-black text-indigo-600 font-mono">
-                                                    {/* Automatically includes regular days new pages + sard day new pages safely */}
                                                     {filteredHistory.reduce((acc, curr) => acc + (curr.new?.pages || 0), 0).toFixed(1)}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة فعلية</span>
@@ -2000,7 +2021,7 @@
                                                                         </span>
                                                                         {sardDay && (
                                                                             <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2.5 py-0.5 rounded-full border border-purple-100">
-                                                                                جلسة سرد الإثنين
+                                                                                جلسة سرد
                                                                             </span>
                                                                         )}
                                                                         {session.attendance && (
@@ -2303,7 +2324,7 @@
                                         type="submit"
                                         className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-100 transition-all"
                                     >
-                                        إضافة الطالب لقائمة المتابعة
+                                        إضافة الطالب لقاعدة البيانات
                                     </button>
                                 </div>
 
