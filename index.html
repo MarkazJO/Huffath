@@ -262,6 +262,7 @@
         const isOfficialRecitationDate = (dateStr) => OFFICIAL_RECITATION_DATES.includes(dateStr);
         const isGoalDay = (dateStr) => {
             if (!isOfficialRecitationDate(dateStr)) return false;
+            if (dateStr === FIRST_RECITATION_DATE) return true; // Explicitly count opening day as a 2.5-page goal
             const day = getDayOfWeek(dateStr);
             return day === 3 || day === 6; // Wednesday or Saturday
         };
