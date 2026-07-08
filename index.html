@@ -272,14 +272,80 @@
             return getDayOfWeek(dateStr) === 1; // Monday
         };
 
-        const getRangeEdgesFromRaw = (raw) => {
+        const normalizeArabicDigits = (value) => {
+            if (value === null || value === undefined) return '';
+
+            return String(value)
+                .replace(/[\u0660-\u0669]/g, d => String(d.charCodeAt(0) - 0x0660))
+                .replace(/[\u06F0-\u06F9]/g, d => String(d.charCodeAt(0) - 0x06F0));
+        };
+
+        const getPageSetFromRaw = (raw) => {
             if (typeof raw !== 'string') return null;
 
-            const numbers = (raw.match(/\d+/g) || [])
-                .map(Number)
-                .filter(n => Number.isFinite(n));
+            const normalized = normalizeArabicDigits(raw)
+                .replace(/[–—−]/g, '-')
+                .replace(/[،,]/g, '+')
+                .replace(/\s+/g, '');
 
-            if (numbers.length === 0) return null;
+            if (!normalized) return null;
+
+            const pages = new Set();
+            const segments = normalized.split('+').filter(Boolean);
+
+            segments.forEach(segment => {
+                const numbers = (segment.match(/\d+/g) || [])
+                    .map(Number)
+                    .filter(n => Number.isFinite(n) && n > 0);
+
+                if (numbers.length === 0) return;
+
+                if (segment.includes('-') && numbers.length >= 2) {
+                    const start = Math.min(numbers[0], numbers[1]);
+                    const end = Math.max(numbers[0], numbers[1]);
+
+                    for (let page = start; page <= end; page += 1) {
+                        pages.add(page);
+                    }
+                    return;
+                }
+
+                numbers.forEach(page => pages.add(page));
+            });
+
+            return pages.size > 0 ? pages : null;
+        };
+
+        const formatPageSet = (pageSet) => {
+            if (!pageSet || pageSet.size === 0) return '---';
+
+            const sorted = [...pageSet].sort((a, b) => a - b);
+            const ranges = [];
+
+            let start = sorted[0];
+            let prev = sorted[0];
+
+            for (let i = 1; i < sorted.length; i += 1) {
+                const current = sorted[i];
+                if (current === prev + 1) {
+                    prev = current;
+                    continue;
+                }
+
+                ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+                start = current;
+                prev = current;
+            }
+
+            ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+            return ranges.join(' + ');
+        };
+
+        const getRangeEdgesFromRaw = (raw) => {
+            const pageSet = getPageSetFromRaw(raw);
+            if (!pageSet || pageSet.size === 0) return null;
+
+            const numbers = [...pageSet];
 
             return {
                 start: Math.min(...numbers),
@@ -287,23 +353,67 @@
             };
         };
 
-        const getPageBoundsFromSessionItem = (sessionItem) => {
+        const getPageSetFromSessionItem = (sessionItem) => {
             if (!sessionItem) return null;
+
+            // Raw text can encode disjoint ranges (e.g., 502-531+402-431+350-364).
+            // Prefer it to avoid stale start/end values collapsing the set.
+            const rawPageSet = getPageSetFromRaw(sessionItem.raw);
+            if (rawPageSet && rawPageSet.size > 0) {
+                return rawPageSet;
+            }
 
             const start = Number(sessionItem.start);
             const end = Number(sessionItem.end);
-
             if (Number.isFinite(start) && Number.isFinite(end) && start > 0 && end > 0) {
-                return {
-                    start: Math.min(start, end),
-                    end: Math.max(start, end)
-                };
+                const pages = new Set();
+                const low = Math.min(start, end);
+                const high = Math.max(start, end);
+                for (let page = low; page <= high; page += 1) {
+                    pages.add(page);
+                }
+                return pages;
             }
 
-            const rawEdges = getRangeEdgesFromRaw(sessionItem.raw);
-            if (rawEdges) return rawEdges;
+            return getPageSetFromRaw(sessionItem.raw);
+        };
 
-            return null;
+        const getNumericPages = (sessionItem) => {
+            if (!sessionItem) return 0;
+
+            const pageSet = getPageSetFromSessionItem(sessionItem);
+            if (pageSet && pageSet.size > 0) {
+                return pageSet.size;
+            }
+
+            const pagesValue = sessionItem.pages;
+            if (typeof pagesValue === 'number' && Number.isFinite(pagesValue)) {
+                return pagesValue;
+            }
+
+            if (typeof pagesValue === 'string') {
+                const parsed = Number(normalizeArabicDigits(pagesValue).trim());
+                if (Number.isFinite(parsed)) return parsed;
+            }
+
+            return 0;
+        };
+
+        const formatPagesCount = (value) => {
+            const numeric = Number(value);
+            if (!Number.isFinite(numeric)) return '0';
+            return Number.isInteger(numeric) ? `${numeric}` : numeric.toFixed(1);
+        };
+
+        const getPageBoundsFromSessionItem = (sessionItem) => {
+            const pageSet = getPageSetFromSessionItem(sessionItem);
+            if (!pageSet || pageSet.size === 0) return null;
+
+            const numbers = [...pageSet];
+            return {
+                start: Math.min(...numbers),
+                end: Math.max(...numbers)
+            };
         };
 
         const getBoundsFromPageSet = (pageSet) => {
@@ -353,36 +463,42 @@
                 let sardPages = 0;
                 let jadidBounds = null;
                 let sardBounds = null;
+                let jadidRaw = '---';
+                let sardRaw = '---';
 
-                const newBounds = getPageBoundsFromSessionItem(session?.new);
-                if (newBounds) {
+                const newPageSet = getPageSetFromSessionItem(session?.new);
+                if (newPageSet && newPageSet.size > 0) {
                     const jadidPageSet = new Set();
                     const sardPageSet = new Set();
 
-                    for (let page = newBounds.start; page <= newBounds.end; page += 1) {
+                    newPageSet.forEach(page => {
                         if (isSardDay(session?.date) && previouslyRecitedAsJadid.has(page)) {
                             sardPageSet.add(page);
                         } else {
                             jadidPageSet.add(page);
                         }
-                    }
+                    });
 
                     jadidPages = jadidPageSet.size;
                     sardPages = sardPageSet.size;
                     jadidBounds = getBoundsFromPageSet(jadidPageSet);
                     sardBounds = getBoundsFromPageSet(sardPageSet);
+                    jadidRaw = formatPageSet(jadidPageSet);
+                    sardRaw = formatPageSet(sardPageSet);
 
                     jadidPageSet.forEach(page => previouslyRecitedAsJadid.add(page));
                 } else {
-                    const fallbackNewPages = Number(session?.new?.pages || 0);
+                    const fallbackNewPages = getNumericPages(session?.new);
                     if (isSardDay(session?.date)) {
                         sardPages = fallbackNewPages;
+                        sardRaw = (session?.new?.raw || '').trim() || '---';
                     } else {
                         jadidPages = fallbackNewPages;
+                        jadidRaw = (session?.new?.raw || '').trim() || '---';
                     }
                 }
 
-                stats[idx] = { jadidPages, sardPages, jadidBounds, sardBounds };
+                stats[idx] = { jadidPages, sardPages, jadidBounds, sardBounds, jadidRaw, sardRaw };
             });
 
             return stats;
@@ -733,8 +849,8 @@
 
                             const reviewSessions = filteredEntries
                                 .map(({ session }) => session)
-                                .filter(session => session.review?.pages > 0);
-                            const totalReviewPages = reviewSessions.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                                .filter(session => getNumericPages(session.review) > 0);
+                            const totalReviewPages = reviewSessions.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
                             const avgReviewGradeValue = calculateAverageGradeValue(reviewSessions, 'review');
                             const reviewComposite = totalReviewPages * avgReviewGradeValue;
                             const hasReviewActivity = totalReviewPages > 0 ? 1 : 0;
@@ -803,7 +919,7 @@
                                 totalNew += splitStats[idx].jadidPages;
                             }
                             if (session.review?.pages) {
-                                totalReview += parseFloat(session.review.pages);
+                                totalReview += getNumericPages(session.review);
                             }
                         }
                     });
@@ -926,25 +1042,41 @@
 
                 const updatedStudents = data.students.map(student => {
                     if (student.id === parseInt(formStudentId)) {
+                        const newPageSet = getPageSetFromRaw(formNewRaw);
+                        const newRange = getBoundsFromPageSet(newPageSet);
+                        const reviewPageSet = getPageSetFromRaw(formReviewRaw);
+                        const reviewRange = getBoundsFromPageSet(reviewPageSet);
+
+                        const parsedNewPages = Number(formNewPages);
+                        const parsedReviewPages = Number(formReviewPages);
+
                         const newSession = {
                             date: formDate,
                             new: formNewRaw ? {
                                 type: "range",
                                 raw: formNewRaw,
-                                start: parseInt(formNewRaw.split('-')[0]) || 0,
-                                end: parseInt(formNewRaw.split('-')[1]) || 0,
-                                pages: parseFloat(formNewPages) || 1,
+                                start: newRange?.start || 0,
+                                end: newRange?.end || 0,
+                                pages: Number.isFinite(parsedNewPages) && parsedNewPages > 0
+                                    ? parsedNewPages
+                                    : (newPageSet ? newPageSet.size : 1),
                                 grade: formNewGrade || null,
-                                sheetPages: parseFloat(formNewPages) || 1
+                                sheetPages: Number.isFinite(parsedNewPages) && parsedNewPages > 0
+                                    ? parsedNewPages
+                                    : (newPageSet ? newPageSet.size : 1)
                             } : null,
                             review: formReviewRaw ? {
                                 type: "range",
                                 raw: formReviewRaw,
-                                start: parseInt(formReviewRaw.split('-')[0]) || 0,
-                                end: parseInt(formReviewRaw.split('-')[1]) || 0,
-                                pages: parseFloat(formReviewPages) || 1,
+                                start: reviewRange?.start || 0,
+                                end: reviewRange?.end || 0,
+                                pages: Number.isFinite(parsedReviewPages) && parsedReviewPages > 0
+                                    ? parsedReviewPages
+                                    : (reviewPageSet ? reviewPageSet.size : 1),
                                 grade: formReviewGrade || null,
-                                sheetPages: parseFloat(formReviewPages) || 1
+                                sheetPages: Number.isFinite(parsedReviewPages) && parsedReviewPages > 0
+                                    ? parsedReviewPages
+                                    : (reviewPageSet ? reviewPageSet.size : 1)
                             } : null
                         };
 
@@ -1101,7 +1233,7 @@
                 const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
 
                 const totalNewPages = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
-                const totalReviewPages = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                const totalReviewPages = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
                 const totalSardNew = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
 
                 // Calculate page range for new memorization
@@ -1285,8 +1417,8 @@
                                             const sessionSplit = splitStats[idx] || {};
                                             const sessionJadidPages = sessionSplit.jadidPages || 0;
                                             const sessionSardPages = sessionSplit.sardPages || 0;
-                                            const sessionJadidRaw = formatBounds(sessionSplit.jadidBounds);
-                                            const sessionSardRaw = formatBounds(sessionSplit.sardBounds);
+                                            const sessionJadidRaw = sessionSplit.jadidRaw || formatBounds(sessionSplit.jadidBounds);
+                                            const sessionSardRaw = sessionSplit.sardRaw || formatBounds(sessionSplit.sardBounds);
                                             return (
                                                 <div key={index} className="relative space-y-2">
                                                     <div className="absolute right-[-31px] top-1.5 w-4.5 h-4.5 rounded-full bg-indigo-50 border-2 border-indigo-500 flex items-center justify-center">
@@ -1361,7 +1493,7 @@
                                                                     <span className="font-bold text-slate-700 font-mono">{session.review.raw}</span>
                                                                     <div className="flex items-center gap-1.5">
                                                                         <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
-                                                                            {session.review.pages} ص
+                                                                            {formatPagesCount(getNumericPages(session.review))} ص
                                                                         </span>
                                                                         {session.review.grade && (
                                                                             <span className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap ${getGradePillClass(session.review.grade)}`}>
@@ -1749,16 +1881,16 @@
                                             const activeItems = sessions.map(s => s[category]).filter(Boolean);
                                             if (activeItems.length === 0) return '---';
 
-                                            const starts = activeItems.map(item => item.start).filter(v => typeof v === 'number' && !isNaN(v));
-                                            const ends = activeItems.map(item => item.end).filter(v => typeof v === 'number' && !isNaN(v));
+                                            const mergedSet = activeItems.reduce((setAcc, item) => {
+                                                const itemSet = getPageSetFromSessionItem(item);
+                                                if (itemSet && itemSet.size > 0) {
+                                                    itemSet.forEach(page => setAcc.add(page));
+                                                }
+                                                return setAcc;
+                                            }, new Set());
 
-                                            const allHaveStartEnd = activeItems.every(item => typeof item.start === 'number' && typeof item.end === 'number');
-
-                                            if (allHaveStartEnd && starts.length > 0 && ends.length > 0) {
-                                                const minStart = Math.min(...starts);
-                                                const maxEnd = Math.max(...ends);
-                                                if (minStart === maxEnd) return `${minStart}`;
-                                                return `${minStart}-${maxEnd}`;
+                                            if (mergedSet.size > 0) {
+                                                return formatPageSet(mergedSet);
                                             }
 
                                             const uniqueRaws = [...new Set(activeItems.map(item => item.raw.trim()))];
@@ -1766,7 +1898,7 @@
                                         };
 
                                         const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
-                                        const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                                        const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
 
                                         const jadidSessions = filteredEntries
                                             .filter(({ idx }) => (splitStats[idx]?.jadidPages || 0) > 0)
@@ -1775,7 +1907,7 @@
                                         const currentNewPages = totalNewPagesInRange > 0 ? totalNewPagesInRange.toFixed(1) : '0.0';
                                         const currentNewGrade = calculateMeanGrade(jadidSessions, 'new');
 
-                                        const reviewSessions = filteredHistory.filter(session => session.review?.pages > 0);
+                                        const reviewSessions = filteredHistory.filter(session => getNumericPages(session.review) > 0);
                                         const currentReviewRaw = summarizeRaw(reviewSessions, 'review');
                                         const currentReviewPages = totalReviewPagesInRange > 0 ? totalReviewPagesInRange.toFixed(1) : '0.0';
                                         const currentReviewGrade = calculateMeanGrade(reviewSessions, 'review');
@@ -1955,7 +2087,7 @@
                                                     const sardEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.sardPages || 0) > 0);
 
                                                     const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
-                                                    const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0);
+                                                    const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
                                                     const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
 
                                                     const studentGroup = student.group || student.level || '---';
@@ -2174,7 +2306,7 @@
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">مراجعة بالنطاق</span>
                                                 <span className="sm:text-lg md:text-2xl font-black text-sky-600 font-mono">
-                                                    {filteredHistory.reduce((acc, curr) => acc + (curr.review?.pages || 0), 0).toFixed(1)}
+                                                    {filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0).toFixed(1)}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة</span>
                                             </div>
@@ -2195,8 +2327,8 @@
                                                         const sessionSplit = splitStats[idx] || {};
                                                         const sessionJadidPages = sessionSplit.jadidPages || 0;
                                                         const sessionSardPages = sessionSplit.sardPages || 0;
-                                                        const sessionJadidRaw = formatBounds(sessionSplit.jadidBounds);
-                                                        const sessionSardRaw = formatBounds(sessionSplit.sardBounds);
+                                                        const sessionJadidRaw = sessionSplit.jadidRaw || formatBounds(sessionSplit.jadidBounds);
+                                                        const sessionSardRaw = sessionSplit.sardRaw || formatBounds(sessionSplit.sardBounds);
                                                         return (
                                                             <div key={index} className="relative space-y-2">
                                                                 <div className="absolute right-[-31px] top-1.5 w-4.5 h-4.5 rounded-full bg-indigo-50 border-2 border-indigo-500 flex items-center justify-center">
@@ -2273,7 +2405,7 @@
                                                                                 <span className="font-bold text-slate-700 font-mono">{session.review.raw}</span>
                                                                                 <div className="flex items-center gap-1.5">
                                                                                     <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
-                                                                                        {session.review.pages} ص
+                                                                                        {formatPagesCount(getNumericPages(session.review))} ص
                                                                                     </span>
                                                                                     {session.review.grade && (
                                                                                         <span className={`px-2.5 py-1 rounded-lg text-xs font-bold whitespace-nowrap ${getGradePillClass(session.review.grade)}`}>
