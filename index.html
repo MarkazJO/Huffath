@@ -262,7 +262,6 @@
         const isOfficialRecitationDate = (dateStr) => OFFICIAL_RECITATION_DATES.includes(dateStr);
         const isGoalDay = (dateStr) => {
             if (!isOfficialRecitationDate(dateStr)) return false;
-            if (dateStr === FIRST_RECITATION_DATE) return false; // First day has zero target
             const day = getDayOfWeek(dateStr);
             return day === 3 || day === 6; // Wednesday or Saturday
         };
