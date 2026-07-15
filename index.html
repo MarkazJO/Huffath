@@ -254,17 +254,33 @@
         const FIRST_RECITATION_DATE = "2026-06-29";
         const WEEKDAY_ABBR = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
 
+        const normalizeGroupName = (groupName) => String(groupName || '').trim().replace(/\s+/g, ' ');
+        const isWustaGroup = (groupName) => {
+            const normalized = normalizeGroupName(groupName).replace(/^ال/, '');
+            return normalized === 'وسطى' || normalized === 'وسطي';
+        };
+
         const getDayOfWeek = (dateStr) => new Date(`${dateStr}T00:00:00`).getDay();
         const formatDateWithWeekday = (dateStr) => {
             if (!dateStr) return "-";
             return `${dateStr} (${WEEKDAY_ABBR[getDayOfWeek(dateStr)]})`;
         };
         const isOfficialRecitationDate = (dateStr) => OFFICIAL_RECITATION_DATES.includes(dateStr);
-        const isGoalDay = (dateStr) => {
+        const isGoalDay = (dateStr, groupName) => {
             if (!isOfficialRecitationDate(dateStr)) return false;
-            if (dateStr === FIRST_RECITATION_DATE) return true; // Explicitly count opening day as a 2.5-page goal
+            if (dateStr === FIRST_RECITATION_DATE) return !isWustaGroup(groupName);
             const day = getDayOfWeek(dateStr);
             return day === 3 || day === 6; // Wednesday or Saturday
+        };
+
+        const calculateExpectedDaysForGroup = (groupName, start, end) => {
+            let expectedDays = OFFICIAL_RECITATION_DATES.filter(date => date >= start && date <= end).length;
+
+            if (isWustaGroup(groupName) && FIRST_RECITATION_DATE >= start && FIRST_RECITATION_DATE <= end) {
+                expectedDays -= 1;
+            }
+
+            return Math.max(0, expectedDays);
         };
         const isSardDay = (dateStr) => {
             if (!isOfficialRecitationDate(dateStr)) return false;
@@ -787,7 +803,7 @@
                 let targetSum = 0;
                 OFFICIAL_RECITATION_DATES.forEach((dateStr) => {
                     if (dateStr < start || dateStr > end) return;
-                    if (isGoalDay(dateStr)) {
+                    if (isGoalDay(dateStr, groupName)) {
                         targetSum += 2.5;
                     }
                 });
@@ -841,7 +857,9 @@
                             const attendedDays = filteredEntries.filter(
                                 ({ session }) => isOfficialRecitationDate(session.date) && isAttendancePresent(session.attendance)
                             ).length;
-                            const absences = Math.max(0, expectedDaysInRange - attendedDays);
+                            const studentGroup = student.group || student.level || '---';
+                            const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                            const absences = Math.max(0, expectedDays - attendedDays);
 
                             const totalJadidPages = jadidEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
                             const avgJadidGradeValue = calculateAverageGradeValue(jadidEntries.map(({ session }) => session), 'new');
@@ -879,8 +897,10 @@
                         return (pagesByStudentId.get(b.id) || 0) - (pagesByStudentId.get(a.id) || 0);
                     }
                     if (sortBy === 'composite-criteria') {
-                        const aMetrics = compositeByStudentId.get(a.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
-                        const bMetrics = compositeByStudentId.get(b.id) || { absences: expectedDaysInRange, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
+                        const aExpectedDays = calculateExpectedDaysForGroup(a.group || a.level || '---', startDate, endDate);
+                        const bExpectedDays = calculateExpectedDaysForGroup(b.group || b.level || '---', startDate, endDate);
+                        const aMetrics = compositeByStudentId.get(a.id) || { absences: aExpectedDays, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
+                        const bMetrics = compositeByStudentId.get(b.id) || { absences: bExpectedDays, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
 
                         if (aMetrics.absences !== bMetrics.absences) {
                             return aMetrics.absences - bMetrics.absences;
@@ -1259,7 +1279,7 @@
                     : 100;
 
                 const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                const expectedDays = expectedDaysInRange;
+                const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
 
                 return (
                     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans" dir="rtl">
@@ -1940,7 +1960,7 @@
                                             : 100;
 
                                                     const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                                                    const expectedDays = expectedDaysInRange;
+                                                    const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
 
                                                     return (
                                                         <div 
@@ -2111,7 +2131,7 @@
                                                         : 100;
 
                                                     const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                                                    const expectedDays = expectedDaysInRange;
+                                                    const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
 
                                                     return (
                                                         <tr 
