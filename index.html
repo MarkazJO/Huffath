@@ -274,13 +274,7 @@
         };
 
         const calculateExpectedDaysForGroup = (groupName, start, end) => {
-            let expectedDays = OFFICIAL_RECITATION_DATES.filter(date => date >= start && date <= end).length;
-
-            if (isWustaGroup(groupName) && FIRST_RECITATION_DATE >= start && FIRST_RECITATION_DATE <= end) {
-                expectedDays -= 1;
-            }
-
-            return Math.max(0, expectedDays);
+            return OFFICIAL_RECITATION_DATES.filter(date => date >= start && date <= end).length;
         };
         const isSardDay = (dateStr) => {
             if (!isOfficialRecitationDate(dateStr)) return false;
