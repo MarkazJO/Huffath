@@ -1224,6 +1224,35 @@
                 });
             };
 
+            // Extract all unique dates from JSON array payload (or fallback to OFFICIAL_RECITATION_DATES)
+            const allAvailableDates = useMemo(() => {
+                if (!data || !data.students) return OFFICIAL_RECITATION_DATES;
+                const dateSet = new Set();
+                data.students.forEach(student => {
+                    if (Array.isArray(student.history)) {
+                        student.history.forEach(session => {
+                            if (session && session.date) {
+                                dateSet.add(session.date);
+                            }
+                        });
+                    }
+                });
+                if (dateSet.size === 0) return OFFICIAL_RECITATION_DATES;
+                return Array.from(dateSet).sort();
+            }, [data]);
+
+            // First date in the JSON array
+            const firstDateInJson = useMemo(() => {
+                return allAvailableDates.length > 0 ? allAvailableDates[0] : '2026-06-29';
+            }, [allAvailableDates]);
+
+            // Set start date to the first date in the JSON array automatically when data updates
+            useEffect(() => {
+                if (firstDateInJson) {
+                    setStartDate(firstDateInJson);
+                }
+            }, [firstDateInJson]);
+
             // Inclusive range filter checker
             const isDateInRange = (dateStr) => {
                 if (!dateStr) return false;
@@ -1231,17 +1260,20 @@
             };
 
             const expectedDaysInRange = useMemo(() => {
-                return OFFICIAL_RECITATION_DATES.filter(date => date >= startDate && date <= endDate).length;
-            }, [startDate, endDate]);
+                return allAvailableDates.filter(date => date >= startDate && date <= endDate).length;
+            }, [allAvailableDates, startDate, endDate]);
 
-            // Calculate student target expectation pages based on official schedule
+            // Calculate expected days to be attended from the JSON array dates
+            const calculateExpectedDaysForGroup = (groupName, start, end) => {
+                return allAvailableDates.filter(date => date >= start && date <= end).length;
+            };
+
+            // Calculate student target expectation pages (2 new pages per day)
             const calculateTargetPages = (groupName, start, end) => {
                 let targetSum = 0;
-                OFFICIAL_RECITATION_DATES.forEach((dateStr) => {
+                allAvailableDates.forEach((dateStr) => {
                     if (dateStr < start || dateStr > end) return;
-                    if (isGoalDay(dateStr, groupName)) {
-                        targetSum += 2.5;
-                    }
+                    targetSum += 2;
                 });
                 return targetSum;
             };
