@@ -1074,6 +1074,230 @@
 
 
         // ==========================================
+        // PROGRESS BAR METRICS & COLOR CODING (RED -> ORANGE -> GREEN)
+        // ==========================================
+        const getProgressHue = (percent) => {
+            const clamped = Math.min(100, Math.max(0, Number(percent) || 0));
+            // 21 steps (0%, 5%, 10%, ..., 100%), each 5% step has a distinct hue from red (0) to green (130)
+            const step = Math.min(20, Math.floor(clamped / 5));
+            return Math.round(step * 6.5);
+        };
+
+        const getProgressColor = (percent) => {
+            const hue = getProgressHue(percent);
+            // Slight lightness adjustment for yellows (hue 45-65) to preserve strong contrast
+            const lightness = (hue >= 45 && hue <= 65) ? '38%' : '44%';
+            return `hsl(${hue}, 85%, ${lightness})`;
+        };
+
+        const getGradeValueForFactor = (grade) => {
+            if (!grade) return 0.75; // Default is جيد جدا (0.75) if no data
+            const clean = String(grade).trim().replace('جدًا', 'جدا');
+            if (clean === 'ممتاز') return 1.0;
+            if (clean === 'جيد جدا') return 0.75;
+            if (clean === 'جيد') return 0.5;
+            if (clean === 'مقبول') return 0.25;
+            return 0.75; // Default is جيد جدا (0.75)
+        };
+
+        // Students who completed the entire Quran (خاتمين للقرآن الكريم)
+        const QURAN_COMPLETERS = [
+            "يامن فادي العطرة",
+            "يحيى خالد الشدفان",
+            "يحيى الشدفان",
+            "محمود الأطرش",
+            "عبدالله الشهبان",
+            "عمار عميرة",
+            "يوسف خالد الشدفان"
+        ];
+
+        const isQuranCompleter = (studentName) => {
+            if (!studentName) return false;
+            const clean = String(studentName).trim().replace(/\s+/g, ' ');
+            return QURAN_COMPLETERS.some(name => {
+                const targetClean = name.trim().replace(/\s+/g, ' ');
+                return clean === targetClean || (clean.includes("يحيى") && clean.includes("الشدفان"));
+            });
+        };
+
+        const calculateStudentProgressMetrics = ({
+            studentName = '',
+            filteredEntries = [],
+            splitStats = {},
+            targetPages = 0,
+            totalNewPagesInRange = 0,
+            totalReviewPagesInRange = 0,
+            expectedSessionsCount = 0
+        }) => {
+            const isCompleter = isQuranCompleter(studentName);
+
+            // 1. New Memorization (Jadid) Progress Bar:
+            // For Quran completers: jadid goal is 0
+            const jadidTarget = isCompleter ? 0 : targetPages;
+            const jadidProgress = jadidTarget > 0 
+                ? Math.min(100, Math.round((totalNewPagesInRange / jadidTarget) * 100))
+                : 0;
+
+            // 2. Review (Murajaah) Progress Bar:
+            // For Quran completers: 20 pages per session (40 per week)
+            // For standard students: twice as jadid
+            const reviewTarget = isCompleter 
+                ? (expectedSessionsCount * 20)
+                : (targetPages * 2);
+
+            const reviewProgress = reviewTarget > 0 
+                ? Math.min(100, Math.round((totalReviewPagesInRange / reviewTarget) * 100))
+                : (totalReviewPagesInRange > 0 ? 100 : 0);
+
+            // 3. Grade Factor:
+            let totalJadidPagesRecited = 0;
+            let weightedGradeSum = 0;
+
+            filteredEntries.forEach(({ session, idx }) => {
+                const pages = splitStats[idx]?.jadidPages || 0;
+                if (pages > 0) {
+                    const gradeVal = getGradeValueForFactor(session?.new?.grade);
+                    weightedGradeSum += pages * gradeVal;
+                    totalJadidPagesRecited += pages;
+                }
+            });
+
+            // When there is no data, default grade factor is جيد جدا (0.75)
+            const gradeFactor = totalJadidPagesRecited > 0 
+                ? (weightedGradeSum / totalJadidPagesRecited) 
+                : 0.75;
+
+            // 3rd Bar: take the 1st prog bar, multiply by grade factor, add 2nd prog bar, divide by 2
+            const compositeProgress = isCompleter
+                ? reviewProgress
+                : Math.min(
+                    100, 
+                    Math.max(0, Math.round(((jadidProgress * gradeFactor) + reviewProgress) / 2))
+                );
+
+            return {
+                isCompleter,
+                jadidTarget,
+                jadidProgress,
+                reviewTarget,
+                reviewProgress,
+                gradeFactor,
+                compositeProgress
+            };
+        };
+
+        const MultiProgressBar = ({
+            isCompleter = false,
+            jadidProgress,
+            reviewProgress,
+            compositeProgress,
+            gradeFactor = 0.75,
+            showLabels = true,
+            className = ""
+        }) => {
+            // For students who finished the entire Quran:
+            // "remove the first progress and last bar for them" -> Only the review progress bar is rendered
+            if (isCompleter) {
+                return (
+                    <div className={`flex items-center gap-1.5 text-[10px] w-full min-w-[130px] ${className}`}>
+                        {showLabels && (
+                            <span className="text-slate-500 font-bold w-10 text-right shrink-0" title="خاتم للقرآن الكريم (هدف المراجعة: 20 ص/جلسة)">
+                                مراجعة
+                            </span>
+                        )}
+                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{ 
+                                    width: `${Math.min(100, Math.max(0, reviewProgress))}%`,
+                                    backgroundColor: getProgressColor(reviewProgress)
+                                }}
+                            />
+                        </div>
+                        <span 
+                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            style={{ color: getProgressColor(reviewProgress) }}
+                        >
+                            {reviewProgress}%
+                        </span>
+                    </div>
+                );
+            }
+
+            return (
+                <div className={`flex flex-col gap-1.5 w-full min-w-[130px] ${className}`}>
+                    {/* Bar 1: جديد */}
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                        {showLabels && <span className="text-slate-400 font-bold w-10 text-right shrink-0">جديد</span>}
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{ 
+                                    width: `${Math.min(100, Math.max(0, jadidProgress))}%`,
+                                    backgroundColor: getProgressColor(jadidProgress)
+                                }}
+                            />
+                        </div>
+                        <span 
+                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            style={{ color: getProgressColor(jadidProgress) }}
+                        >
+                            {jadidProgress}%
+                        </span>
+                    </div>
+
+                    {/* Bar 2: مراجعة (هدفها ضعف الجديد) */}
+                    <div className="flex items-center gap-1.5 text-[10px]">
+                        {showLabels && <span className="text-slate-400 font-bold w-10 text-right shrink-0">مراجعة</span>}
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{ 
+                                    width: `${Math.min(100, Math.max(0, reviewProgress))}%`,
+                                    backgroundColor: getProgressColor(reviewProgress)
+                                }}
+                            />
+                        </div>
+                        <span 
+                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            style={{ color: getProgressColor(reviewProgress) }}
+                        >
+                            {reviewProgress}%
+                        </span>
+                    </div>
+
+                    {/* Bar 3: الكلي / التقييم الموزون */}
+                    <div className="flex items-center gap-1.5 text-[10px] pt-1 border-t border-slate-100/80">
+                        {showLabels && (
+                            <span 
+                                className="text-slate-600 font-black w-10 text-right shrink-0 cursor-help"
+                                title={`معامل درجات الجديد: ${gradeFactor.toFixed(2)}`}
+                            >
+                                الكلي
+                            </span>
+                        )}
+                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                            <div 
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{ 
+                                    width: `${Math.min(100, Math.max(0, compositeProgress))}%`,
+                                    backgroundColor: getProgressColor(compositeProgress)
+                                }}
+                            />
+                        </div>
+                        <span 
+                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            style={{ color: getProgressColor(compositeProgress) }}
+                        >
+                            {compositeProgress}%
+                        </span>
+                    </div>
+                </div>
+            );
+        };
+
+
+        // ==========================================
         // MAIN REACT APPLICATION COMPONENT
         // ==========================================
         function App() {
@@ -1268,8 +1492,11 @@
                 return allAvailableDates.filter(date => date >= start && date <= end).length;
             };
 
-            // Calculate student target expectation pages (2 new pages per day)
-            const calculateTargetPages = (groupName, start, end) => {
+            // Calculate student target expectation pages (2 new pages per day, or 0 for Quran completers)
+            const calculateTargetPages = (groupName, start, end, studentName = '') => {
+                if (isQuranCompleter(studentName)) {
+                    return 0;
+                }
                 let targetSum = 0;
                 allAvailableDates.forEach((dateStr) => {
                     if (dateStr < start || dateStr > end) return;
@@ -1300,56 +1527,33 @@
                     list = list.filter(student => (student.group || student.level) === selectedLevel);
                 }
 
-                const pagesByStudentId = sortBy === 'pages-desc'
+                const progressMetricsByStudentId = (sortBy && sortBy.startsWith('progress-'))
                     ? new Map(
                         list.map(student => {
-                            const splitStats = getSessionSplitStatsByIndex(student.history || []);
-                            const totalJadidPages = (student.history || []).reduce((acc, session, idx) => {
-                                if (!isDateInRange(session.date)) return acc;
-                                return acc + (splitStats[idx]?.jadidPages || 0);
-                            }, 0);
+                            const studentHistory = student.history || [];
+                            const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
+                            const splitStats = getSessionSplitStatsByIndex(studentHistory);
+                            const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
+                            const filteredHistory = filteredEntries.map(({ session }) => session);
 
-                            return [student.id, totalJadidPages];
-                        })
-                    )
-                    : null;
+                            const totalNewPagesInRange = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                            const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
 
-                const compositeByStudentId = sortBy === 'composite-criteria'
-                    ? new Map(
-                        list.map(student => {
-                            const splitStats = getSessionSplitStatsByIndex(student.history || []);
-                            const historyWithIndex = (student.history || []).map((session, idx) => ({ session, idx }));
-                            const filteredEntries = historyWithIndex.filter(({ session }) => isDateInRange(session.date));
-                            const jadidEntries = filteredEntries.filter(({ idx }) => (splitStats[idx]?.jadidPages || 0) > 0);
-
-                            const attendedDays = filteredEntries.filter(
-                                ({ session }) => isOfficialRecitationDate(session.date) && isAttendancePresent(session.attendance)
-                            ).length;
                             const studentGroup = student.group || student.level || '---';
                             const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
-                            const absences = Math.max(0, expectedDays - attendedDays);
+                            const targetPages = calculateTargetPages(studentGroup, startDate, endDate, student.name);
 
-                            const totalJadidPages = jadidEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
-                            const avgJadidGradeValue = calculateAverageGradeValue(jadidEntries.map(({ session }) => session), 'new');
-                            const jadidComposite = totalJadidPages * avgJadidGradeValue;
+                            const metrics = calculateStudentProgressMetrics({
+                                studentName: student.name,
+                                filteredEntries,
+                                splitStats,
+                                targetPages,
+                                totalNewPagesInRange,
+                                totalReviewPagesInRange,
+                                expectedSessionsCount: expectedDays
+                            });
 
-                            const reviewSessions = filteredEntries
-                                .map(({ session }) => session)
-                                .filter(session => getNumericPages(session.review) > 0);
-                            const totalReviewPages = reviewSessions.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
-                            const avgReviewGradeValue = calculateAverageGradeValue(reviewSessions, 'review');
-                            const reviewComposite = totalReviewPages * avgReviewGradeValue;
-                            const hasReviewActivity = totalReviewPages > 0 ? 1 : 0;
-
-                            return [
-                                student.id,
-                                {
-                                    absences,
-                                    jadidComposite,
-                                    reviewComposite,
-                                    hasReviewActivity
-                                }
-                            ];
+                            return [student.id, metrics];
                         })
                     )
                     : null;
@@ -1358,30 +1562,25 @@
                     if (sortBy === 'name-asc') {
                         return a.name.localeCompare(b.name, 'ar');
                     }
-                    if (sortBy === 'name-desc') {
-                        return b.name.localeCompare(a.name, 'ar');
+                    if (sortBy === 'progress-composite-desc') {
+                        const aMet = progressMetricsByStudentId?.get(a.id);
+                        const bMet = progressMetricsByStudentId?.get(b.id);
+                        const diff = (bMet?.compositeProgress || 0) - (aMet?.compositeProgress || 0);
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
                     }
-                    if (sortBy === 'pages-desc') {
-                        return (pagesByStudentId.get(b.id) || 0) - (pagesByStudentId.get(a.id) || 0);
+                    if (sortBy === 'progress-jadid-desc') {
+                        const aMet = progressMetricsByStudentId?.get(a.id);
+                        const bMet = progressMetricsByStudentId?.get(b.id);
+                        const diff = (bMet?.jadidProgress || 0) - (aMet?.jadidProgress || 0);
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
                     }
-                    if (sortBy === 'composite-criteria') {
-                        const aExpectedDays = calculateExpectedDaysForGroup(a.group || a.level || '---', startDate, endDate);
-                        const bExpectedDays = calculateExpectedDaysForGroup(b.group || b.level || '---', startDate, endDate);
-                        const aMetrics = compositeByStudentId.get(a.id) || { absences: aExpectedDays, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
-                        const bMetrics = compositeByStudentId.get(b.id) || { absences: bExpectedDays, jadidComposite: 0, reviewComposite: 0, hasReviewActivity: 0 };
-
-                        if (aMetrics.absences !== bMetrics.absences) {
-                            return aMetrics.absences - bMetrics.absences;
-                        }
-                        if (aMetrics.jadidComposite !== bMetrics.jadidComposite) {
-                            return bMetrics.jadidComposite - aMetrics.jadidComposite;
-                        }
-                        if (aMetrics.hasReviewActivity !== bMetrics.hasReviewActivity) {
-                            return bMetrics.hasReviewActivity - aMetrics.hasReviewActivity;
-                        }
-                        if (aMetrics.reviewComposite !== bMetrics.reviewComposite) {
-                            return bMetrics.reviewComposite - aMetrics.reviewComposite;
-                        }
+                    if (sortBy === 'progress-review-desc') {
+                        const aMet = progressMetricsByStudentId?.get(a.id);
+                        const bMet = progressMetricsByStudentId?.get(b.id);
+                        const diff = (bMet?.reviewProgress || 0) - (aMet?.reviewProgress || 0);
+                        if (diff !== 0) return diff;
                         return a.name.localeCompare(b.name, 'ar');
                     }
                     return 0;
@@ -1398,7 +1597,7 @@
                 
                 processedStudents.forEach(student => {
                     const studentGroup = student.group || student.level || '---';
-                    totalTarget += calculateTargetPages(studentGroup, startDate, endDate);
+                    totalTarget += calculateTargetPages(studentGroup, startDate, endDate, student.name);
 
                     const splitStats = getSessionSplitStatsByIndex(student.history || []);
                     (student.history || []).forEach((session, idx) => {
@@ -1741,13 +1940,26 @@
                     ? Math.max(...reviewSessionsWithPages.map(s => s.review.end))
                     : '-';
 
-                const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
-                const progressPercentage = targetPages > 0 
-                    ? Math.min(100, Math.round((totalNewPages / targetPages) * 100)) 
-                    : 100;
+                const isCompleter = isQuranCompleter(loggedInStudent.name);
+                const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                const targetPages = calculateTargetPages(studentGroup, startDate, endDate, loggedInStudent.name);
+                const {
+                    jadidProgress,
+                    reviewTarget,
+                    reviewProgress,
+                    gradeFactor,
+                    compositeProgress
+                } = calculateStudentProgressMetrics({
+                    studentName: loggedInStudent.name,
+                    filteredEntries,
+                    splitStats,
+                    targetPages,
+                    totalNewPagesInRange: totalNewPages,
+                    totalReviewPagesInRange: totalReviewPages,
+                    expectedSessionsCount: expectedDays
+                });
 
                 const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
 
                 return (
                     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans" dir="rtl">
@@ -1835,16 +2047,22 @@
                                     </div>
                                 </div>
 
-                                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
-                                    <div className="space-y-1.5">
-                                        <span className="text-xs text-slate-400 font-bold block">إنجاز الحفظ</span>
-                                        <div className="flex items-baseline gap-1">
-                                            <span className="sm:text-lg md:text-2xl font-black text-purple-600">{progressPercentage}%</span>
+                                <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex flex-col justify-between">
+                                    <div className="flex justify-between items-center mb-1.5">
+                                        <span className="text-xs text-slate-400 font-bold block">
+                                            {isCompleter ? 'إنجاز المراجعة (خاتم)' : 'مؤشرات الإنجاز'}
+                                        </span>
+                                        <div className="p-2 bg-purple-50 text-purple-500 rounded-xl">
+                                            <Award size={16} />
                                         </div>
                                     </div>
-                                    <div className="p-3 bg-purple-50 text-purple-500 rounded-xl">
-                                        <Award size={18} />
-                                    </div>
+                                    <MultiProgressBar 
+                                        isCompleter={isCompleter}
+                                        jadidProgress={jadidProgress}
+                                        reviewProgress={reviewProgress}
+                                        compositeProgress={compositeProgress}
+                                        gradeFactor={gradeFactor}
+                                    />
                                 </div>
 
                                 <div className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm flex justify-between items-center">
@@ -1893,7 +2111,7 @@
                             <CumulativeProgressChart
                                 filteredEntries={filteredEntries}
                                 sessionSplitStats={splitStats}
-                                targetPages={targetPages}
+                                targetPages={isCompleter ? reviewTarget : targetPages}
                                 getReviewPages={(session) => getNumericPages(session.review)}
                             />
 
@@ -2344,12 +2562,12 @@
                                             <select 
                                                 value={sortBy}
                                                 onChange={(e) => setSortBy(e.target.value)}
-                                                className="bg-[#F8FAFC] border border-slate-100 hover:bg-slate-50 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 focus:outline-none"
+                                                className="bg-[#F8FAFC] border border-slate-100 hover:bg-slate-50 px-3 py-2 rounded-xl text-xs font-bold text-slate-600 focus:outline-none cursor-pointer"
                                             >
-                                                <option value="composite-criteria">معايير مركبة</option>
                                                 <option value="name-asc">الاسم (أ - ي)</option>
-                                                <option value="name-desc">الاسم (ي - أ)</option>
-                                                <option value="pages-desc">الأعلى إنجازاً بالصفحات (خلال النطاق)</option>
+                                                <option value="progress-composite-desc">الأعلى إنجازاً (الكلي)</option>
+                                                <option value="progress-jadid-desc">الأعلى إنجازاً (جديد)</option>
+                                                <option value="progress-review-desc">الأعلى إنجازاً (مراجعة)</option>
                                             </select>
                                         </div>
 
@@ -2428,14 +2646,26 @@
                                         const totalSardSessions = sardEntries.length;
 
                                         const studentGroup = student.group || student.level || '---';
-                                        const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
+                                        const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                                        const targetPages = calculateTargetPages(studentGroup, startDate, endDate, student.name);
+                                        const {
+                                            isCompleter,
+                                            jadidProgress,
+                                            reviewTarget,
+                                            reviewProgress,
+                                            gradeFactor,
+                                            compositeProgress
+                                        } = calculateStudentProgressMetrics({
+                                            studentName: student.name,
+                                            filteredEntries,
+                                            splitStats,
+                                            targetPages,
+                                            totalNewPagesInRange,
+                                            totalReviewPagesInRange,
+                                            expectedSessionsCount: expectedDays
+                                        });
 
-                                        const progressPercentage = targetPages > 0 
-                                            ? Math.min(100, Math.round((totalNewPagesInRange / targetPages) * 100)) 
-                                            : 100;
-
-                                                    const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                                                    const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                                        const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
 
                                                     return (
                                                         <div 
@@ -2460,7 +2690,11 @@
                                                     </h3>
 
                                                     <p className="text-[10px] text-slate-400 font-bold mb-4">
-                                                        الهدف للحفظ الجديد في النطاق: <span className="text-slate-700 font-extrabold">{targetPages} صفحات</span>
+                                                        {isCompleter ? (
+                                                            <span>الهدف في النطاق: مراجعة <strong className="text-slate-700 font-extrabold">{reviewTarget} ص</strong> <span className="text-purple-600 font-bold">(خاتم للقرآن)</span></span>
+                                                        ) : (
+                                                            <span>الهدف في النطاق: جديد <strong className="text-slate-700 font-extrabold">{targetPages} ص</strong> | مراجعة <strong className="text-slate-700 font-extrabold">{reviewTarget} ص</strong></span>
+                                                        )}
                                                     </p>
 
                                                     {/* New Memorization Section */}
@@ -2547,20 +2781,23 @@
                                                     </div>
                                                 </div>
 
-                                                <div className="mt-3 pt-3 border-t border-slate-100/60 flex justify-between items-center text-[10px] font-bold text-slate-800">
-                                                    <span className="font-mono text-slate-600">{progressPercentage}%</span>
-                                                    
-                                                    <div className="flex-1 mx-4 h-1 bg-slate-100 rounded-full overflow-hidden">
-                                                        <div 
-                                                            className="h-full bg-slate-800 group-hover:bg-indigo-600 transition-all rounded-full" 
-                                                            style={{ width: `${progressPercentage}%` }}
-                                                        ></div>
+                                                <div className="mt-3 pt-3 border-t border-slate-100/60 space-y-2">
+                                                    <div className="flex justify-between items-center text-[10px] font-bold text-slate-500">
+                                                        <span>{isCompleter ? 'إنجاز المراجعة في النطاق (خاتم)' : 'نسب الإنجاز في النطاق'}</span>
+                                                        {!isCompleter && (
+                                                            <span className="flex items-center gap-1" title={`معامل درجات الجديد: ${gradeFactor.toFixed(2)}`}>
+                                                                <span>الكلي:</span>
+                                                                <strong className="font-mono font-black text-xs" style={{ color: getProgressColor(compositeProgress) }}>{compositeProgress}%</strong>
+                                                            </span>
+                                                        )}
                                                     </div>
-
-                                                    <div className="flex items-center gap-1.5 text-slate-400 font-bold whitespace-nowrap">
-                                                        <span>إنجاز النطاق (جديد)</span>
-                                                        <span className="w-1.5 h-1.5 rounded-full bg-slate-800 group-hover:bg-indigo-600 transition-colors"></span>
-                                                    </div>
+                                                    <MultiProgressBar 
+                                                        isCompleter={isCompleter}
+                                                        jadidProgress={jadidProgress}
+                                                        reviewProgress={reviewProgress}
+                                                        compositeProgress={compositeProgress}
+                                                        gradeFactor={gradeFactor}
+                                                    />
                                                 </div>
 
                                             </div>
@@ -2600,13 +2837,26 @@
                                                     const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
 
                                                     const studentGroup = student.group || student.level || '---';
-                                                    const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
-                                                    const progressPercentage = targetPages > 0 
-                                                        ? Math.min(100, Math.round((totalNewPagesInRange / targetPages) * 100)) 
-                                                        : 100;
+                                                    const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                                                    const targetPages = calculateTargetPages(studentGroup, startDate, endDate, student.name);
+                                                    const {
+                                                        isCompleter,
+                                                        jadidProgress,
+                                                        reviewTarget,
+                                                        reviewProgress,
+                                                        gradeFactor,
+                                                        compositeProgress
+                                                    } = calculateStudentProgressMetrics({
+                                                        studentName: student.name,
+                                                        filteredEntries,
+                                                        splitStats,
+                                                        targetPages,
+                                                        totalNewPagesInRange,
+                                                        totalReviewPagesInRange,
+                                                        expectedSessionsCount: expectedDays
+                                                    });
 
                                                     const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
-                                                    const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
 
                                                     return (
                                                         <tr 
@@ -2614,7 +2864,16 @@
                                                             onClick={() => setSelectedStudent(student)}
                                                             className={`border-b border-slate-100 hover:bg-indigo-50/50 transition-colors cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
                                                         >
-                                                            <td className="px-4 py-3 font-bold text-slate-800">{student.name}</td>
+                                                            <td className="px-4 py-3 font-bold text-slate-800">
+                                                                <div className="flex items-center gap-1.5">
+                                                                    <span>{student.name}</span>
+                                                                    {isCompleter && (
+                                                                        <span className="text-[9px] bg-purple-50 text-purple-700 border border-purple-100/60 px-1.5 py-0.5 rounded font-black">
+                                                                            خاتم
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            </td>
                                                             <td className="px-4 py-3">
                                                                 <span className="px-2.5 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-xs font-black border border-indigo-100/30">
                                                                     {studentGroup}
@@ -2639,18 +2898,26 @@
                                                                 </div>
                                                             </td>
                                                             <td className="px-4 py-3">
-                                                                <span className="font-black text-slate-800">{targetPages}</span>
+                                                                {isCompleter ? (
+                                                                    <div className="flex flex-col text-xs">
+                                                                        <span className="font-black text-slate-800">{reviewTarget} <span className="text-[10px] text-slate-400 font-normal">مراجعة</span></span>
+                                                                        <span className="text-[10px] font-bold text-purple-600 bg-purple-50 border border-purple-100/60 px-1.5 py-0.5 rounded-md w-fit">20 ص/جلسة</span>
+                                                                    </div>
+                                                                ) : (
+                                                                    <div className="flex flex-col text-xs">
+                                                                        <span className="font-black text-slate-800">{targetPages} <span className="text-[10px] text-slate-400 font-normal">جديد</span></span>
+                                                                        <span className="font-bold text-slate-500 text-[11px]">{reviewTarget} <span className="text-[10px] text-slate-400 font-normal">مراجعة</span></span>
+                                                                    </div>
+                                                                )}
                                                             </td>
                                                             <td className="px-4 py-3">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-20 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-                                                                        <div 
-                                                                            className="h-full bg-indigo-600 rounded-full" 
-                                                                            style={{ width: `${progressPercentage}%` }}
-                                                                        ></div>
-                                                                    </div>
-                                                                    <span className="font-black text-slate-700 text-xs w-8 text-left">{progressPercentage}%</span>
-                                                                </div>
+                                                                <MultiProgressBar 
+                                                                    isCompleter={isCompleter}
+                                                                    jadidProgress={jadidProgress}
+                                                                    reviewProgress={reviewProgress}
+                                                                    compositeProgress={compositeProgress}
+                                                                    gradeFactor={gradeFactor}
+                                                                />
                                                             </td>
                                                             <td className="px-4 py-3">
                                                                 <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded-lg text-xs font-black border border-blue-100/50">
@@ -2754,7 +3021,26 @@
                         const filteredEntries = totalHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
                         const filteredHistory = filteredEntries.map(({ session }) => session);
                         const studentGroup = selectedStudent.group || selectedStudent.level || '---';
-                        const targetPages = calculateTargetPages(studentGroup, startDate, endDate);
+                        const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                        const targetPages = calculateTargetPages(studentGroup, startDate, endDate, selectedStudent.name);
+                        const totalNewPages = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                        const totalReviewPages = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
+                        const {
+                            isCompleter,
+                            jadidProgress,
+                            reviewTarget,
+                            reviewProgress,
+                            gradeFactor,
+                            compositeProgress
+                        } = calculateStudentProgressMetrics({
+                            studentName: selectedStudent.name,
+                            filteredEntries,
+                            splitStats,
+                            targetPages,
+                            totalNewPagesInRange: totalNewPages,
+                            totalReviewPagesInRange: totalReviewPages,
+                            expectedSessionsCount: expectedDays
+                        });
                         
                         return (
                             <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2807,24 +3093,42 @@
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">الهدف المطلوب بالنطاق</span>
                                                 <span className="sm:text-lg md:text-2xl font-black text-slate-800 font-mono">
-                                                    {targetPages}
+                                                    {isCompleter ? reviewTarget : targetPages}
                                                 </span>
-                                                <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة هدف</span>
+                                                <span className="text-[10px] font-bold text-slate-400 mt-1">
+                                                    {isCompleter ? 'صفحة مراجعة (خاتم للقرآن)' : `صفحة هدف (مراجعة: ${reviewTarget})`}
+                                                </span>
                                             </div>
 
                                             <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center">
                                                 <span className="text-[10px] font-bold text-slate-400 mb-1">مراجعة بالنطاق</span>
                                                 <span className="sm:text-lg md:text-2xl font-black text-sky-600 font-mono">
-                                                    {filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0).toFixed(1)}
+                                                    {totalReviewPages.toFixed(1)}
                                                 </span>
                                                 <span className="text-[10px] font-bold text-slate-400 mt-1">صفحة</span>
                                             </div>
                                         </div>
 
+                                        <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 space-y-2">
+                                            <div className="flex justify-between items-center text-xs font-bold text-slate-700">
+                                                <span>{isCompleter ? 'مؤشر إنجاز المراجعة (خاتم للقرآن)' : 'مؤشرات الإنجاز في النطاق'}</span>
+                                                <span className="text-[11px] text-slate-400 font-mono">
+                                                    {isCompleter ? `الهدف: ${reviewTarget} صفحة مراجعة (20 ص/جلسة)` : `الهدف: جديد (${targetPages} ص) | مراجعة (${reviewTarget} ص)`}
+                                                </span>
+                                            </div>
+                                            <MultiProgressBar 
+                                                isCompleter={isCompleter}
+                                                jadidProgress={jadidProgress}
+                                                reviewProgress={reviewProgress}
+                                                compositeProgress={compositeProgress}
+                                                gradeFactor={gradeFactor}
+                                            />
+                                        </div>
+
                                         <CumulativeProgressChart
                                             filteredEntries={filteredEntries}
                                             sessionSplitStats={splitStats}
-                                            targetPages={targetPages}
+                                            targetPages={isCompleter ? reviewTarget : targetPages}
                                             getReviewPages={(session) => getNumericPages(session.review)}
                                         />
 
