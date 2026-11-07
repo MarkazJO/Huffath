@@ -475,11 +475,11 @@
                 let sardBounds = null;
                 let jadidRaw = '---';
                 let sardRaw = '---';
+                let jadidPageSet = new Set();
+                let sardPageSet = new Set();
 
                 const newPageSet = getPageSetFromSessionItem(session?.new);
                 if (newPageSet && newPageSet.size > 0) {
-                    const jadidPageSet = new Set();
-                    const sardPageSet = new Set();
 
                     newPageSet.forEach(page => {
                         if (isSardDay(session?.date) && previouslyRecitedAsJadid.has(page)) {
@@ -499,16 +499,19 @@
                     jadidPageSet.forEach(page => previouslyRecitedAsJadid.add(page));
                 } else {
                     const fallbackNewPages = getNumericPages(session?.new);
+                    const fallbackPageSet = getPageSetFromSessionItem(session?.new) || new Set();
                     if (isSardDay(session?.date)) {
                         sardPages = fallbackNewPages;
                         sardRaw = (session?.new?.raw || '').trim() || '---';
+                        sardPageSet = fallbackPageSet;
                     } else {
                         jadidPages = fallbackNewPages;
                         jadidRaw = (session?.new?.raw || '').trim() || '---';
+                        jadidPageSet = fallbackPageSet;
                     }
                 }
 
-                stats[idx] = { jadidPages, sardPages, jadidBounds, sardBounds, jadidRaw, sardRaw };
+                stats[idx] = { jadidPages, sardPages, jadidBounds, sardBounds, jadidRaw, sardRaw, jadidPageSet, sardPageSet };
             });
 
             return stats;
@@ -1593,32 +1596,49 @@
             const overallMetrics = useMemo(() => {
                 let totalNew = 0;
                 let totalReview = 0;
-                let totalTarget = 0;
+                let sumAchievementRates = 0;
                 
                 processedStudents.forEach(student => {
-                    const studentGroup = student.group || student.level || '---';
-                    totalTarget += calculateTargetPages(studentGroup, startDate, endDate, student.name);
+                    const studentHistory = student.history || [];
+                    const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
+                    const splitStats = getSessionSplitStatsByIndex(studentHistory);
+                    const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
+                    const filteredHistory = filteredEntries.map(({ session }) => session);
 
-                    const splitStats = getSessionSplitStatsByIndex(student.history || []);
-                    (student.history || []).forEach((session, idx) => {
-                        if (isDateInRange(session.date)) {
-                            if (splitStats[idx]?.jadidPages) {
-                                totalNew += splitStats[idx].jadidPages;
-                            }
-                            if (session.review?.pages) {
-                                totalReview += getNumericPages(session.review);
-                            }
-                        }
+                    const studentNewPages = filteredEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.jadidPages || 0), 0);
+                    const studentReviewPages = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
+
+                    totalNew += studentNewPages;
+                    totalReview += studentReviewPages;
+
+                    const studentGroup = student.group || student.level || '---';
+                    const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
+                    const targetPages = calculateTargetPages(studentGroup, startDate, endDate, student.name);
+
+                    const metrics = calculateStudentProgressMetrics({
+                        studentName: student.name,
+                        filteredEntries,
+                        splitStats,
+                        targetPages,
+                        totalNewPagesInRange: studentNewPages,
+                        totalReviewPagesInRange: studentReviewPages,
+                        expectedSessionsCount: expectedDays
                     });
+
+                    // For خاتم: take the murajaah value; for others: take the 3rd progress bar value
+                    const studentRate = metrics.isCompleter ? metrics.reviewProgress : metrics.compositeProgress;
+                    sumAchievementRates += studentRate;
                 });
 
-                const targetAchieved = totalTarget > 0 ? Math.round((totalNew / totalTarget) * 100) : 0;
-                const boundedTarget = Math.min(100, Math.max(0, targetAchieved));
+                const averageRate = processedStudents.length > 0 
+                    ? Math.round(sumAchievementRates / processedStudents.length) 
+                    : 0;
+                const boundedRate = Math.min(100, Math.max(0, averageRate));
 
                 return {
                     totalNew: totalNew.toFixed(1),
                     totalReview: totalReview.toFixed(1),
-                    achievementRate: boundedTarget
+                    achievementRate: boundedRate
                 };
             }, [processedStudents, startDate, endDate]);
 
@@ -2482,7 +2502,7 @@
                                         <div className="flex flex-col justify-between h-full">
                                             <span className="text-xs font-bold text-slate-400 group-hover:text-slate-600 transition-colors">نسبة الإنجاز للطلاب الظاهرين</span>
                                             <div className="flex items-baseline gap-1.5">
-                                                <span className="sm:text-xl md:text-3xl font-black tracking-tight text-slate-900 font-mono">
+                                                <span className="sm:text-xl md:text-3xl font-black tracking-tight font-mono" style={{ color: getProgressColor(overallMetrics.achievementRate) }}>
                                                     {overallMetrics.achievementRate}%
                                                 </span>
                                             </div>
@@ -2630,7 +2650,12 @@
                                         const jadidSessions = filteredEntries
                                             .filter(({ idx }) => (splitStats[idx]?.jadidPages || 0) > 0)
                                             .map(({ session }) => session);
-                                        const currentNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.jadidBounds || null), null));
+                                        const mergedJadidSet = new Set();
+                                        filteredEntries.forEach(({ idx }) => {
+                                            const pSet = splitStats[idx]?.jadidPageSet || getPageSetFromRaw(splitStats[idx]?.jadidRaw);
+                                            if (pSet) pSet.forEach(p => mergedJadidSet.add(p));
+                                        });
+                                        const currentNewRaw = formatPageSet(mergedJadidSet);
                                         const currentNewPages = totalNewPagesInRange > 0 ? totalNewPagesInRange.toFixed(1) : '0.0';
                                         const currentNewGrade = calculateMeanGrade(jadidSessions, 'new');
 
@@ -2640,7 +2665,12 @@
                                         const currentReviewGrade = calculateMeanGrade(reviewSessions, 'review');
 
                                         const totalSardNewPages = sardEntries.reduce((acc, { idx }) => acc + (splitStats[idx]?.sardPages || 0), 0);
-                                        const currentSardNewRaw = formatBounds(filteredEntries.reduce((acc, { idx }) => mergeBounds(acc, splitStats[idx]?.sardBounds || null), null));
+                                        const mergedSardSet = new Set();
+                                        sardEntries.forEach(({ idx }) => {
+                                            const pSet = splitStats[idx]?.sardPageSet || getPageSetFromRaw(splitStats[idx]?.sardRaw);
+                                            if (pSet) pSet.forEach(p => mergedSardSet.add(p));
+                                        });
+                                        const currentSardNewRaw = formatPageSet(mergedSardSet);
                                         const currentSardNewPages = totalSardNewPages > 0 ? totalSardNewPages.toFixed(1) : '0.0';
                                         const currentSardGrade = calculateMeanGrade(sardEntries.map(({ session }) => session), 'new');
                                         const totalSardSessions = sardEntries.length;
@@ -2710,11 +2740,11 @@
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors">
-                                                            <span className="text-xs font-black text-slate-700 font-mono truncate max-w-[150px]" title={currentNewRaw}>
+                                                        <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors gap-2">
+                                                            <span className="text-xs font-black text-slate-700 font-mono leading-relaxed flex-1" title={currentNewRaw}>
                                                                 {currentNewRaw}
                                                             </span>
-                                                            <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
+                                                            <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap shrink-0">
                                                                 {currentNewPages} ص
                                                             </span>
                                                         </div>
@@ -2733,11 +2763,11 @@
                                                                 </span>
                                                             )}
                                                         </div>
-                                                        <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors">
-                                                            <span className="text-xs font-black text-slate-400 font-mono truncate max-w-[150px]" title={currentReviewRaw}>
+                                                        <div className="flex justify-between items-center bg-slate-50/70 rounded-2xl p-3 border border-slate-100/50 group-hover:bg-slate-50 transition-colors gap-2">
+                                                            <span className="text-xs font-black text-slate-500 font-mono leading-relaxed flex-1" title={currentReviewRaw}>
                                                                 {currentReviewRaw}
                                                             </span>
-                                                            <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap">
+                                                            <span className="bg-purple-50 text-purple-700 border border-purple-100/80 px-2.5 py-1 rounded-lg text-xs font-black font-mono whitespace-nowrap shrink-0">
                                                                 {currentReviewPages} ص
                                                             </span>
                                                         </div>
