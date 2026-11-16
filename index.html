@@ -1454,6 +1454,7 @@
             allStudents = [],
             processedStudents = [],
             dynamicGroupsList = [],
+            allAvailableDates = [],
             initialStartDate = '',
             initialEndDate = '',
             triggerNotification = () => {}
@@ -1537,6 +1538,34 @@
                 if (startDate && dateStr < startDate) return false;
                 if (endDate && dateStr > endDate) return false;
                 return true;
+            };
+
+            // Calculate available session dates for expected days and targets
+            const availableDates = useMemo(() => {
+                if (allAvailableDates && allAvailableDates.length > 0) return allAvailableDates;
+                const dates = new Set();
+                allStudents.forEach(student => {
+                    (student.history || []).forEach(session => {
+                        if (session && session.date) dates.add(session.date);
+                    });
+                });
+                return Array.from(dates).sort();
+            }, [allAvailableDates, allStudents]);
+
+            const calculateExpectedDaysForGroup = (groupName, start, end) => {
+                return availableDates.filter(date => (!start || date >= start) && (!end || date <= end)).length;
+            };
+
+            const calculateTargetPages = (groupName, start, end, studentName = '') => {
+                if (isQuranCompleter(studentName)) {
+                    return 0;
+                }
+                let targetSum = 0;
+                availableDates.forEach((dateStr) => {
+                    if ((start && dateStr < start) || (end && dateStr > end)) return;
+                    targetSum += 2;
+                });
+                return targetSum;
             };
 
             // Compute data for each student
@@ -4779,6 +4808,7 @@
                         allStudents={data.students || []}
                         processedStudents={processedStudents}
                         dynamicGroupsList={dynamicGroupsList}
+                        allAvailableDates={allAvailableDates}
                         initialStartDate={startDate}
                         initialEndDate={endDate}
                         triggerNotification={triggerNotification}
