@@ -67,7 +67,10 @@
                 padding: 0 !important;
                 height: auto !important;
                 min-height: 0 !important;
+                width: 100% !important;
+                max-width: 100% !important;
                 overflow: visible !important;
+                box-sizing: border-box !important;
             }
 
             /* Completely remove #root app UI from print flow to avoid any extra blank pages */
@@ -80,10 +83,19 @@
                 display: block !important;
                 position: static !important;
                 width: 100% !important;
+                max-width: 100% !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
                 color: #0f172a !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+            }
+
+            .printable-report-wrapper {
+                width: 100% !important;
+                max-width: 100% !important;
+                box-sizing: border-box !important;
             }
 
             .no-print {
@@ -101,7 +113,17 @@
             }
 
             table {
+                width: 100% !important;
+                max-width: 100% !important;
+                table-layout: fixed !important;
+                box-sizing: border-box !important;
                 page-break-inside: auto;
+            }
+
+            th, td {
+                word-break: break-word !important;
+                overflow-wrap: break-word !important;
+                box-sizing: border-box !important;
             }
 
             tr {
@@ -120,6 +142,7 @@
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                box-sizing: border-box;
             }
         }
     </style>
@@ -1379,13 +1402,13 @@
             // "remove the first progress and last bar for them" -> Only the review progress bar is rendered
             if (isCompleter) {
                 return (
-                    <div className={`flex items-center gap-1.5 text-[10px] w-full min-w-[130px] ${className}`}>
+                    <div className={`flex items-center gap-1 text-[9px] w-full min-w-0 ${className}`}>
                         {showLabels && (
-                            <span className="text-slate-500 font-bold w-10 text-right shrink-0" title="خاتم للقرآن الكريم (هدف المراجعة: 20 ص/جلسة)">
+                            <span className="text-slate-500 font-bold shrink-0 text-[8.5px]" title="خاتم للقرآن الكريم (هدف المراجعة: 20 ص/جلسة)">
                                 مراجعة
                             </span>
                         )}
-                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div 
                                 className="h-full rounded-full transition-all duration-300"
                                 style={{ 
@@ -1395,7 +1418,7 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            className="font-mono font-black text-[9px] shrink-0"
                             style={{ color: getProgressColor(reviewProgress) }}
                         >
                             {reviewProgress}%
@@ -1405,11 +1428,11 @@
             }
 
             return (
-                <div className={`flex flex-col gap-1.5 w-full min-w-[130px] ${className}`}>
+                <div className={`flex flex-col gap-1 w-full min-w-0 ${className}`}>
                     {/* Bar 1: جديد */}
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                        {showLabels && <span className="text-slate-400 font-bold w-10 text-right shrink-0">جديد</span>}
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div className="flex items-center gap-1 text-[8.5px]">
+                        {showLabels && <span className="text-slate-400 font-bold w-6 text-right shrink-0">جديد</span>}
+                        <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                             <div 
                                 className="h-full rounded-full transition-all duration-300"
                                 style={{ 
@@ -1419,17 +1442,17 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            className="font-mono font-black text-[8.5px] w-5 text-left shrink-0"
                             style={{ color: getProgressColor(jadidProgress) }}
                         >
                             {jadidProgress}%
                         </span>
                     </div>
 
-                    {/* Bar 2: مراجعة (هدفها ضعف الجديد) */}
-                    <div className="flex items-center gap-1.5 text-[10px]">
-                        {showLabels && <span className="text-slate-400 font-bold w-10 text-right shrink-0">مراجعة</span>}
-                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+                    {/* Bar 2: مراجعة */}
+                    <div className="flex items-center gap-1 text-[8.5px]">
+                        {showLabels && <span className="text-slate-400 font-bold w-6 text-right shrink-0">مراجعة</span>}
+                        <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                             <div 
                                 className="h-full rounded-full transition-all duration-300"
                                 style={{ 
@@ -1439,24 +1462,24 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            className="font-mono font-black text-[8.5px] w-5 text-left shrink-0"
                             style={{ color: getProgressColor(reviewProgress) }}
                         >
                             {reviewProgress}%
                         </span>
                     </div>
 
-                    {/* Bar 3: الكلي / التقييم الموزون */}
-                    <div className="flex items-center gap-1.5 text-[10px] pt-1 border-t border-slate-100/80">
+                    {/* Bar 3: الكلي */}
+                    <div className="flex items-center gap-1 text-[8.5px] pt-0.5 border-t border-slate-100">
                         {showLabels && (
                             <span 
-                                className="text-slate-600 font-black w-10 text-right shrink-0 cursor-help"
+                                className="text-slate-600 font-black w-6 text-right shrink-0"
                                 title={`معامل درجات الجديد: ${gradeFactor.toFixed(2)}`}
                             >
                                 الكلي
                             </span>
                         )}
-                        <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
                             <div 
                                 className="h-full rounded-full transition-all duration-300"
                                 style={{ 
@@ -1466,7 +1489,7 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[11px] w-8 text-left shrink-0"
+                            className="font-mono font-black text-[8.5px] w-5 text-left shrink-0"
                             style={{ color: getProgressColor(compositeProgress) }}
                         >
                             {compositeProgress}%
@@ -1722,10 +1745,24 @@
                                 <p className="text-xs font-bold text-slate-600 mt-0.5">{subtitle}</p>
                             </div>
                         </div>
-                        <div className="text-left text-[11px] font-bold text-slate-500 space-y-0.5 font-mono" dir="ltr">
-                            <div>Date: {new Date().toLocaleDateString('ar-EG')}</div>
-                            <div>Scope: {exportScope === 'current' ? 'الطلاب الظاهرون' : exportScope === 'group' ? `مجموعة: ${selectedGroup}` : exportScope === 'single' ? 'تقرير فردي' : 'تحديد مخصص'}</div>
-                            <div>Students: {processedExportData.length}</div>
+                        <div className="text-left text-xs font-bold text-slate-700 space-y-1" dir="rtl">
+                            <div>
+                                <span className="text-slate-400">النطاق: </span>
+                                <span className="text-slate-900 font-black">
+                                    {exportScope === 'current' 
+                                        ? 'الطلاب الظاهرون' 
+                                        : exportScope === 'group' 
+                                            ? (selectedGroup === 'all' ? 'جميع الحلقات' : `حلقة ${selectedGroup}`) 
+                                            : exportScope === 'single' 
+                                                ? 'تقرير فردي' 
+                                                : 'تحديد مخصص'}
+                                </span>
+                            </div>
+                            <div>
+                                <span className="text-slate-400">العدد: </span>
+                                <span className="text-indigo-700 font-mono font-black">{processedExportData.length}</span>
+                                <span className="text-slate-600 font-bold"> طالب</span>
+                            </div>
                         </div>
                     </div>
 
@@ -1800,76 +1837,75 @@
                         </div>
                     ) : layout === 'summary' ? (
                         /* Summary Table Layout */
-                        <div className="overflow-x-auto print:overflow-visible">
-                            <table className="w-full text-right border-collapse text-xs print:text-[10px] border border-slate-300">
+                        <div className="w-full overflow-hidden">
+                            <table className="w-full text-right border-collapse text-xs print:text-[8.5px] border border-slate-300 table-fixed" style={{ width: '100%', maxWidth: '100%', tableLayout: 'fixed' }}>
                                 <thead>
                                     <tr className="bg-slate-100 text-slate-800 font-black border-b border-slate-300">
-                                        <th className="p-2 border border-slate-300 text-center w-8">#</th>
-                                        <th className="p-2 border border-slate-300">اسم الطالب</th>
-                                        <th className="p-2 border border-slate-300 text-center w-20">المجموعة</th>
+                                        <th className="p-1 border border-slate-300 text-center w-6">#</th>
+                                        <th className="p-1.5 border border-slate-300 w-24">اسم الطالب</th>
+                                        <th className="p-1 border border-slate-300 text-center w-12">المجموعة</th>
                                         {showJadid && (
-                                            <th className="p-2 border border-slate-300">
+                                            <th className="p-1.5 border border-slate-300">
                                                 <div>الحفظ الجديد</div>
-                                                <div className="text-[9px] font-normal text-slate-500 font-mono">الصفحات والنطاق</div>
+                                                <div className="text-[7.5px] font-normal text-slate-500 font-mono">الصفحات والنطاق</div>
                                             </th>
                                         )}
                                         {showReview && (
-                                            <th className="p-2 border border-slate-300">
+                                            <th className="p-1.5 border border-slate-300">
                                                 <div>المراجعة</div>
-                                                <div className="text-[9px] font-normal text-slate-500 font-mono">الصفحات والنطاق</div>
+                                                <div className="text-[7.5px] font-normal text-slate-500 font-mono">الصفحات والنطاق</div>
                                             </th>
                                         )}
                                         {showSard && (
-                                            <th className="p-2 border border-slate-300">
+                                            <th className="p-1 border border-slate-300 w-14 text-center">
                                                 <div>السرد</div>
-                                                <div className="text-[9px] font-normal text-slate-500 font-mono">صفحات النطاق</div>
                                             </th>
                                         )}
                                         {showProgressBars && (
-                                            <th className="p-2 border border-slate-300 w-36 text-center">نسب الإنجاز</th>
+                                            <th className="p-1 border border-slate-300 w-20 text-center">نسب الإنجاز</th>
                                         )}
                                         {showGrades && (
-                                            <th className="p-2 border border-slate-300 text-center w-20">التقييم</th>
+                                            <th className="p-1 border border-slate-300 text-center w-11">التقييم</th>
                                         )}
                                         {showAttendance && (
-                                            <th className="p-2 border border-slate-300 text-center w-16">الحضور</th>
+                                            <th className="p-1 border border-slate-300 text-center w-11">الحضور</th>
                                         )}
                                         {showNotes && (
-                                            <th className="p-2 border border-slate-300">الملاحظات</th>
+                                            <th className="p-1 border border-slate-300 w-20">الملاحظات</th>
                                         )}
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {processedExportData.map((item, idx) => (
                                         <tr key={item.student.id} className={`print-avoid-break border-b border-slate-300 ${idx % 2 === 0 ? 'bg-white' : 'bg-slate-50/70'}`}>
-                                            <td className="p-2 print:p-1 border border-slate-300 text-center font-mono font-bold text-slate-500">{idx + 1}</td>
-                                            <td className="p-2 border border-slate-300 font-bold text-slate-900">
-                                                <div className="flex items-center gap-1.5">
-                                                    <span>{item.student.name}</span>
+                                            <td className="p-1 border border-slate-300 text-center font-mono font-bold text-slate-500 text-[8.5px]">{idx + 1}</td>
+                                            <td className="p-1.5 border border-slate-300 font-bold text-slate-900">
+                                                <div className="flex items-center gap-1">
+                                                    <span className="truncate">{item.student.name}</span>
                                                     {item.metrics.isCompleter && (
-                                                        <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-1 py-0.5 rounded font-black">
+                                                        <span className="text-[7.5px] bg-purple-100 text-purple-800 border border-purple-200 px-1 py-0.2 rounded font-black shrink-0">
                                                             خاتم
                                                         </span>
                                                     )}
                                                 </div>
                                             </td>
-                                            <td className="p-2 border border-slate-300 text-center">
-                                                <span className="bg-slate-100 text-slate-700 px-1.5 py-0.5 rounded font-bold text-[10px]">
+                                            <td className="p-1 border border-slate-300 text-center">
+                                                <span className="bg-slate-100 text-slate-700 px-1 py-0.5 rounded font-bold text-[8.5px]">
                                                     {item.studentGroup}
                                                 </span>
                                             </td>
                                             {showJadid && (
-                                                <td className="p-2 border border-slate-300">
+                                                <td className="p-1.5 border border-slate-300">
                                                     {item.metrics.isCompleter ? (
-                                                        <span className="text-slate-400 font-bold">---</span>
+                                                        <span className="text-slate-400 font-bold text-center block">---</span>
                                                     ) : (
                                                         <div className="space-y-0.5">
-                                                            <div className="flex items-center gap-1 font-mono font-black text-indigo-700">
+                                                            <div className="flex items-center gap-1 font-mono font-black text-indigo-700 text-[9px]">
                                                                 <span>{item.totalNewPages.toFixed(1)}</span>
-                                                                <span className="text-[9px] text-slate-400">ص</span>
-                                                                <span className="text-[9px] text-slate-400 font-normal">من هدف {item.targetPages}</span>
+                                                                <span className="text-[7.5px] text-slate-400">ص</span>
+                                                                <span className="text-[7.5px] text-slate-400 font-normal">من هدف {item.targetPages}</span>
                                                             </div>
-                                                            <div className="text-[10px] font-mono text-slate-600 truncate max-w-[200px]" title={item.currentNewRaw}>
+                                                            <div className="text-[8px] font-mono text-slate-600 break-words leading-tight" title={item.currentNewRaw}>
                                                                 {item.currentNewRaw}
                                                             </div>
                                                         </div>
@@ -1877,33 +1913,33 @@
                                                 </td>
                                             )}
                                             {showReview && (
-                                                <td className="p-2 border border-slate-300">
+                                                <td className="p-1.5 border border-slate-300">
                                                     <div className="space-y-0.5">
-                                                        <div className="flex items-center gap-1 font-mono font-black text-sky-700">
+                                                        <div className="flex items-center gap-1 font-mono font-black text-sky-700 text-[9px]">
                                                             <span>{item.totalReviewPages.toFixed(1)}</span>
-                                                            <span className="text-[9px] text-slate-400">ص</span>
-                                                            <span className="text-[9px] text-slate-400 font-normal">من هدف {item.metrics.reviewTarget}</span>
+                                                            <span className="text-[7.5px] text-slate-400">ص</span>
+                                                            <span className="text-[7.5px] text-slate-400 font-normal">من هدف {item.metrics.reviewTarget}</span>
                                                         </div>
-                                                        <div className="text-[10px] font-mono text-slate-600 truncate max-w-[200px]" title={item.currentReviewRaw}>
+                                                        <div className="text-[8px] font-mono text-slate-600 break-words leading-tight" title={item.currentReviewRaw}>
                                                             {item.currentReviewRaw}
                                                         </div>
                                                     </div>
                                                 </td>
                                             )}
                                             {showSard && (
-                                                <td className="p-2 border border-slate-300 font-mono">
+                                                <td className="p-1 border border-slate-300 font-mono text-center">
                                                     {item.totalSardPages > 0 ? (
                                                         <div>
-                                                            <span className="font-bold text-amber-700">{item.totalSardPages.toFixed(1)} ص</span>
-                                                            <div className="text-[9px] text-slate-500">{item.currentSardNewRaw}</div>
+                                                            <span className="font-bold text-amber-700 text-[8.5px]">{item.totalSardPages.toFixed(1)} ص</span>
+                                                            <div className="text-[7.5px] text-slate-500 break-words leading-tight">{item.currentSardNewRaw}</div>
                                                         </div>
                                                     ) : (
-                                                        <span className="text-slate-400 text-[10px]">---</span>
+                                                        <span className="text-slate-400 text-[8.5px]">---</span>
                                                     )}
                                                 </td>
                                             )}
                                             {showProgressBars && (
-                                                <td className="p-2 border border-slate-300 w-36">
+                                                <td className="p-1 border border-slate-300 w-20">
                                                     <MultiProgressBar
                                                         isCompleter={item.metrics.isCompleter}
                                                         jadidProgress={item.metrics.jadidProgress}
@@ -1914,24 +1950,24 @@
                                                 </td>
                                             )}
                                             {showGrades && (
-                                                <td className="p-2 border border-slate-300 text-center">
+                                                <td className="p-1 border border-slate-300 text-center">
                                                     {item.currentNewGrade ? (
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${getGradePillClass(item.currentNewGrade)}`}>
+                                                        <span className={`px-1 py-0.5 rounded text-[8.5px] font-bold ${getGradePillClass(item.currentNewGrade)}`}>
                                                             {item.currentNewGrade}
                                                         </span>
                                                     ) : (
-                                                        <span className="text-slate-400 text-[10px]">---</span>
+                                                        <span className="text-slate-400 text-[8.5px]">---</span>
                                                     )}
                                                 </td>
                                             )}
                                             {showAttendance && (
-                                                <td className="p-2 border border-slate-300 text-center font-mono font-bold">
+                                                <td className="p-1 border border-slate-300 text-center font-mono font-bold text-[8.5px]">
                                                     <span className="text-emerald-700">{item.attendedDays}</span>
-                                                    <span className="text-slate-400 text-[10px]">/{item.expectedDays}</span>
+                                                    <span className="text-slate-400 text-[7.5px]">/{item.expectedDays}</span>
                                                 </td>
                                             )}
                                             {showNotes && (
-                                                <td className="p-2 border border-slate-300 text-[10px] text-slate-600 max-w-[150px]">
+                                                <td className="p-1 border border-slate-300 text-[8px] text-slate-600 break-words leading-tight">
                                                     {item.student.notes || '---'}
                                                 </td>
                                             )}
