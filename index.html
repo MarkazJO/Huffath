@@ -1430,8 +1430,8 @@
             return (
                 <div className={`flex flex-col gap-1 w-full min-w-0 ${className}`}>
                     {/* Bar 1: جديد */}
-                    <div className="flex items-center gap-1 text-[8.5px]">
-                        {showLabels && <span className="text-slate-400 font-bold w-6 text-right shrink-0">جديد</span>}
+                    <div className="flex items-center gap-1.5 text-[8px]">
+                        {showLabels && <span className="text-slate-400 font-bold shrink-0 whitespace-nowrap">جديد</span>}
                         <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                             <div 
                                 className="h-full rounded-full transition-all duration-300"
@@ -1442,7 +1442,7 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[8.5px] w-5 text-left shrink-0"
+                            className="font-mono font-black text-[8px] shrink-0 whitespace-nowrap"
                             style={{ color: getProgressColor(jadidProgress) }}
                         >
                             {jadidProgress}%
@@ -1450,8 +1450,8 @@
                     </div>
 
                     {/* Bar 2: مراجعة */}
-                    <div className="flex items-center gap-1 text-[8.5px]">
-                        {showLabels && <span className="text-slate-400 font-bold w-6 text-right shrink-0">مراجعة</span>}
+                    <div className="flex items-center gap-1.5 text-[8px]">
+                        {showLabels && <span className="text-slate-400 font-bold shrink-0 whitespace-nowrap">مراجعة</span>}
                         <div className="flex-1 h-1 bg-slate-100 rounded-full overflow-hidden">
                             <div 
                                 className="h-full rounded-full transition-all duration-300"
@@ -1462,7 +1462,7 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[8.5px] w-5 text-left shrink-0"
+                            className="font-mono font-black text-[8px] shrink-0 whitespace-nowrap"
                             style={{ color: getProgressColor(reviewProgress) }}
                         >
                             {reviewProgress}%
@@ -1470,10 +1470,10 @@
                     </div>
 
                     {/* Bar 3: الكلي */}
-                    <div className="flex items-center gap-1 text-[8.5px] pt-0.5 border-t border-slate-100">
+                    <div className="flex items-center gap-1.5 text-[8px] pt-0.5 border-t border-slate-100">
                         {showLabels && (
                             <span 
-                                className="text-slate-600 font-black w-6 text-right shrink-0"
+                                className="text-slate-600 font-black shrink-0 whitespace-nowrap"
                                 title={`معامل درجات الجديد: ${gradeFactor.toFixed(2)}`}
                             >
                                 الكلي
@@ -1489,7 +1489,7 @@
                             />
                         </div>
                         <span 
-                            className="font-mono font-black text-[8.5px] w-5 text-left shrink-0"
+                            className="font-mono font-black text-[8px] shrink-0 whitespace-nowrap"
                             style={{ color: getProgressColor(compositeProgress) }}
                         >
                             {compositeProgress}%
@@ -1862,13 +1862,13 @@
                                             </th>
                                         )}
                                         {showProgressBars && (
-                                            <th className="p-1 border border-slate-300 w-20 text-center">نسب الإنجاز</th>
+                                            <th className="p-1 border border-slate-300 w-28 text-center">نسب الإنجاز</th>
                                         )}
                                         {showGrades && (
-                                            <th className="p-1 border border-slate-300 text-center w-11">التقييم</th>
+                                            <th className="p-1 border border-slate-300 text-center w-14">التقييم</th>
                                         )}
                                         {showAttendance && (
-                                            <th className="p-1 border border-slate-300 text-center w-11">الحضور</th>
+                                            <th className="p-1 border border-slate-300 text-center w-12">الحضور</th>
                                         )}
                                         {showNotes && (
                                             <th className="p-1 border border-slate-300 w-20">الملاحظات</th>
@@ -1939,7 +1939,7 @@
                                                 </td>
                                             )}
                                             {showProgressBars && (
-                                                <td className="p-1 border border-slate-300 w-20">
+                                                <td className="p-1 border border-slate-300 w-28">
                                                     <MultiProgressBar
                                                         isCompleter={item.metrics.isCompleter}
                                                         jadidProgress={item.metrics.jadidProgress}
@@ -1952,7 +1952,7 @@
                                             {showGrades && (
                                                 <td className="p-1 border border-slate-300 text-center">
                                                     {item.currentNewGrade ? (
-                                                        <span className={`px-1 py-0.5 rounded text-[8.5px] font-bold ${getGradePillClass(item.currentNewGrade)}`}>
+                                                        <span className={`px-1.5 py-0.5 rounded text-[8px] font-bold whitespace-nowrap inline-block ${getGradePillClass(item.currentNewGrade)}`}>
                                                             {item.currentNewGrade}
                                                         </span>
                                                     ) : (
