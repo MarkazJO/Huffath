@@ -1646,6 +1646,7 @@
             // Columns & Stats to show
             const [showJadid, setShowJadid] = useState(true);
             const [showReview, setShowReview] = useState(true);
+            const [showPoints, setShowPoints] = useState(true);
             const [showSard, setShowSard] = useState(false);
             const [showProgressBars, setShowProgressBars] = useState(true);
             const [showGrades, setShowGrades] = useState(true);
@@ -1736,6 +1737,10 @@
                 return targetSum;
             };
 
+            const markazAttendedDatesSet = useMemo(() => {
+                return getMarkazAttendedDates(allStudents || []);
+            }, [allStudents]);
+
             // Compute data for each student
             const processedExportData = useMemo(() => {
                 return targetStudents.map(student => {
@@ -1788,6 +1793,8 @@
                         expectedSessionsCount: expectedDays
                     });
 
+                    const points = calculateStudentAllTimePoints(student, markazAttendedDatesSet);
+
                     return {
                         student,
                         studentGroup,
@@ -1804,19 +1811,22 @@
                         currentNewGrade,
                         currentReviewGrade,
                         attendedDays,
-                        metrics
+                        metrics,
+                        points
                     };
                 });
-            }, [targetStudents, startDate, endDate]);
+            }, [targetStudents, startDate, endDate, markazAttendedDatesSet]);
 
             // Summary metrics for KPI header
             const summaryTotals = useMemo(() => {
                 let sumNew = 0;
                 let sumReview = 0;
                 let sumRate = 0;
+                let sumPoints = 0;
                 processedExportData.forEach(item => {
                     sumNew += item.totalNewPages;
                     sumReview += item.totalReviewPages;
+                    sumPoints += (item.points?.totalPoints || 0);
                     const r = item.metrics.isCompleter ? item.metrics.reviewProgress : item.metrics.compositeProgress;
                     sumRate += r;
                 });
@@ -1824,6 +1834,7 @@
                     count: processedExportData.length,
                     totalNew: sumNew,
                     totalReview: sumReview,
+                    totalPoints: sumPoints,
                     avgRate: processedExportData.length > 0 ? Math.round(sumRate / processedExportData.length) : 0
                 };
             }, [processedExportData]);
@@ -1890,7 +1901,7 @@
                     </div>
 
                     {showSummaryCards && (
-                        <div className="grid grid-cols-4 gap-3 mt-4 print-avoid-break">
+                        <div className={`grid ${showPoints ? 'grid-cols-2 sm:grid-cols-5' : 'grid-cols-2 sm:grid-cols-4'} gap-2.5 mt-4 print-avoid-break`}>
                             <div className="bg-slate-50 border border-slate-200 rounded-xl p-2.5 text-center">
                                 <span className="text-[10px] font-bold text-slate-500 block">إجمالي الطلاب</span>
                                 <span className="text-lg font-black text-slate-800 font-mono">{summaryTotals.count}</span>
@@ -1909,6 +1920,14 @@
                                     {summaryTotals.avgRate}%
                                 </span>
                             </div>
+                            {showPoints && (
+                                <div className="bg-amber-100/60 border border-amber-300 rounded-xl p-2.5 text-center col-span-2 sm:col-span-1">
+                                    <span className="text-[10px] font-bold text-amber-900 block">إجمالي النقاط</span>
+                                    <span className="text-lg font-black text-amber-900 font-mono">
+                                        {summaryTotals.totalPoints}
+                                    </span>
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
@@ -1976,6 +1995,12 @@
                                         )}
                                         {showAttendance && (
                                             <th className="p-1 border border-slate-300 text-center w-12">الحضور</th>
+                                        )}
+                                        {showPoints && (
+                                            <th className="p-1 border border-slate-300 text-center w-12">
+                                                <div>النقاط</div>
+                                                <div className="text-[7.5px] font-normal text-slate-500 font-mono">تراكمي</div>
+                                            </th>
                                         )}
                                         {showNotes && (
                                             <th className="p-1 border border-slate-300 w-20">الملاحظات</th>
@@ -2073,6 +2098,15 @@
                                                     <span className="text-slate-400 text-[7.5px]">/{item.expectedDays}</span>
                                                 </td>
                                             )}
+                                            {showPoints && (
+                                                <td className="p-1 border border-slate-300 text-center font-mono font-bold text-[8.5px]">
+                                                    <span className={`px-1.5 py-0.5 rounded font-black ${
+                                                        (item.points?.totalPoints || 0) >= 0 ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-red-50 text-red-700 border border-red-200'
+                                                    }`} title={`جديد: ${item.points?.jadidPoints} | مراجعة: ${item.points?.reviewPoints} | اختبار: ${item.points?.testPoints} | حضور: ${item.points?.attendancePoints}`}>
+                                                        {item.points?.totalPoints || 0}
+                                                    </span>
+                                                </td>
+                                            )}
                                             {showNotes && (
                                                 <td className="p-1 border border-slate-300 text-[8px] text-slate-600 break-words leading-tight">
                                                     {item.student.notes || '---'}
@@ -2100,11 +2134,20 @@
                                             </div>
                                             <span className="text-xs font-bold text-slate-500">حلقة: {item.studentGroup}</span>
                                         </div>
-                                        {showAttendance && (
-                                            <span className="bg-slate-100 text-slate-700 px-2.5 py-1 rounded-lg text-xs font-bold font-mono">
-                                                حضور: {item.attendedDays} / {item.expectedDays}
-                                            </span>
-                                        )}
+                                        <div className="flex items-center gap-1.5">
+                                            {showAttendance && (
+                                                <span className="bg-slate-100 text-slate-700 px-2 py-0.5 rounded-lg text-xs font-bold font-mono">
+                                                    حضور: {item.attendedDays}/{item.expectedDays}
+                                                </span>
+                                            )}
+                                            {showPoints && (
+                                                <span className={`px-2 py-0.5 rounded-lg text-xs font-mono font-black border ${
+                                                    (item.points?.totalPoints || 0) >= 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'
+                                                }`} title={`جديد: ${item.points?.jadidPoints} | مراجعة: ${item.points?.reviewPoints} | اختبار: ${item.points?.testPoints} | حضور: ${item.points?.attendancePoints}`}>
+                                                    {item.points?.totalPoints || 0} نقطة
+                                                </span>
+                                            )}
+                                        </div>
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-2 text-xs">
@@ -2174,6 +2217,9 @@
                                             <div>جديد: {item.totalNewPages.toFixed(1)} ص / هدف {item.targetPages}</div>
                                             <div>مراجعة: {item.totalReviewPages.toFixed(1)} ص / هدف {item.metrics.reviewTarget}</div>
                                             <div>حضور: {item.attendedDays} / {item.expectedDays}</div>
+                                            {showPoints && (
+                                                <div className="text-amber-400 font-black">نقاط التنافس: {item.points?.totalPoints || 0} نقطة</div>
+                                            )}
                                         </div>
                                     </div>
 
@@ -2199,6 +2245,9 @@
                                                     <th className="p-2 border-l border-slate-300">المراجعة</th>
                                                     <th className="p-2 border-l border-slate-300">الاختبار</th>
                                                     <th className="p-2 text-center w-20">الحضور</th>
+                                                    {showPoints && (
+                                                        <th className="p-2 text-center w-16 border-r border-slate-300">النقاط</th>
+                                                    )}
                                                 </tr>
                                             </thead>
                                             <tbody>
@@ -2273,6 +2322,22 @@
                                                                         {present ? 'حاضر' : 'غائب'}
                                                                     </span>
                                                                 </td>
+                                                                {showPoints && (() => {
+                                                                    const sAttPts = getSessionAttendancePoints(session, markazAttendedDatesSet);
+                                                                    const sJadidPts = getSessionJadidPoints(session);
+                                                                    const sRevPts = getSessionMurajaahPoints(session, item.metrics.isCompleter);
+                                                                    const sTestPts = getSessionTestPoints(session);
+                                                                    const sTot = sAttPts + sJadidPts + sRevPts + sTestPts;
+                                                                    return (
+                                                                        <td className="p-2 text-center font-mono font-bold text-[10px] border-r border-slate-200">
+                                                                            <span className={`px-1.5 py-0.5 rounded ${
+                                                                                sTot >= 0 ? 'bg-amber-50 text-amber-800' : 'bg-red-50 text-red-700'
+                                                                            }`}>
+                                                                                {sTot >= 0 ? `+${sTot}` : sTot}
+                                                                            </span>
+                                                                        </td>
+                                                                    );
+                                                                })()}
                                                             </tr>
                                                         );
                                                     })
@@ -2633,6 +2698,16 @@
                                                         className="w-4 h-4 rounded text-indigo-600 focus:ring-indigo-500 border-slate-300"
                                                     />
                                                     <span>المراجعة (الصفحات والنطاق)</span>
+                                                </label>
+
+                                                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-700 select-none">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={showPoints} 
+                                                        onChange={(e) => setShowPoints(e.target.checked)} 
+                                                        className="w-4 h-4 rounded text-amber-600 focus:ring-amber-500 border-slate-300"
+                                                    />
+                                                    <span>نقاط التنافس (التراكمي)</span>
                                                 </label>
 
 
