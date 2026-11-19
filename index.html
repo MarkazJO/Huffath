@@ -1347,7 +1347,8 @@
                 .replace('جدًا', 'جدا');
 
             let jadidRate = 0;
-            if (cleanGrade === 'ممتاز') jadidRate = 20;
+            if (!cleanGrade) jadidRate = 15; // Assume جيد جدا (15 points/page) if no grade is specified
+            else if (cleanGrade === 'ممتاز') jadidRate = 20;
             else if (cleanGrade === 'جيد جدا') jadidRate = 15;
             else if (cleanGrade === 'جيد') jadidRate = 5;
             else return 0;
