@@ -828,7 +828,32 @@
         const initialData = {
             "generatedAt": null,
             "version": 1,
+            "settings": {
+                "ShowPointsForStudent": false
+            },
             "students": []
+        };
+
+        const isPointsEnabledForStudent = (settings) => {
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('previewPoints') === 'true' || urlParams.get('showPoints') === 'true') {
+                    return true;
+                }
+            } catch (e) {}
+
+            if (!settings) return false;
+            const val = settings.ShowPointsForStudent !== undefined ? settings.ShowPointsForStudent :
+                        settings.showPointsForStudent !== undefined ? settings.showPointsForStudent :
+                        settings.show_points_for_student !== undefined ? settings.show_points_for_student :
+                        settings.showPoints;
+            if (typeof val === 'boolean') return val;
+            if (typeof val === 'string') {
+                const lower = val.trim().toLowerCase();
+                return lower === 'true' || lower === '1' || lower === 'yes';
+            }
+            if (typeof val === 'number') return val === 1;
+            return false;
         };
 
 
@@ -3569,8 +3594,9 @@
             // SUB-VIEW: PERSONAL STUDENT VIEW 
             // ==========================================
             if (currentUserRole === 'student' && loggedInStudent) {
-                const studentGroup = loggedInStudent.group || loggedInStudent.level || '---';
-                const studentHistory = loggedInStudent.history || [];
+                const currentStudent = (data.students || []).find(s => s.id === loggedInStudent.id) || loggedInStudent;
+                const studentGroup = currentStudent.group || currentStudent.level || '---';
+                const studentHistory = currentStudent.history || [];
                 const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
                 const splitStats = getSessionSplitStatsByIndex(studentHistory);
                 const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
@@ -3598,9 +3624,9 @@
                     ? Math.max(...reviewSessionsWithPages.map(s => s.review.end))
                     : '-';
 
-                const isCompleter = isQuranCompleter(loggedInStudent.name);
+                const isCompleter = isQuranCompleter(currentStudent.name);
                 const expectedDays = calculateExpectedDaysForGroup(studentGroup, startDate, endDate);
-                const targetPages = calculateTargetPages(studentGroup, startDate, endDate, loggedInStudent.name);
+                const targetPages = calculateTargetPages(studentGroup, startDate, endDate, currentStudent.name);
                 const {
                     jadidProgress,
                     reviewTarget,
@@ -3608,7 +3634,7 @@
                     gradeFactor,
                     compositeProgress
                 } = calculateStudentProgressMetrics({
-                    studentName: loggedInStudent.name,
+                    studentName: currentStudent.name,
                     filteredEntries,
                     splitStats,
                     targetPages,
@@ -3618,6 +3644,8 @@
                 });
 
                 const attendedDays = filteredHistory.filter(session => isAttendancePresent(session.attendance)).length;
+                const showPointsForStudent = isPointsEnabledForStudent(data?.settings);
+                const studentPts = showPointsForStudent ? (allTimePointsByStudentId?.get(currentStudent.id) || calculateStudentAllTimePoints(currentStudent, markazAttendedDatesSet)) : null;
 
                 return (
                     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans" dir="rtl">
@@ -3644,18 +3672,83 @@
                         <main className="p-6 max-w-4xl mx-auto space-y-6">
                             
                             <div className="bg-white p-6 rounded-3xl shadow-md border border-slate-100 space-y-4">
-                                <div>
-                                    <h2 className="sm:text-xl md:text-3xl font-black text-slate-900">{loggedInStudent.name}</h2>
+                                <div className="flex justify-between items-center flex-wrap gap-2">
+                                    <div>
+                                        <h2 className="sm:text-xl md:text-3xl font-black text-slate-900">{currentStudent.name}</h2>
+                                        <span className="text-xs font-bold text-slate-400 mt-1 inline-block">حلقة: {studentGroup}</span>
+                                    </div>
+                                    {showPointsForStudent && studentPts && (
+                                        <div className="flex items-center gap-2">
+                                            <span 
+                                                className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black font-mono shadow-xs border ${
+                                                    studentPts.totalPoints >= 0 ? 'bg-amber-50 text-amber-800 border-amber-200/70' : 'bg-red-50 text-red-700 border-red-200'
+                                                }`}
+                                                title={`جديد: ${studentPts.jadidPoints} | مراجعة: ${studentPts.reviewPoints} | اختبار: ${studentPts.testPoints} | حضور: ${studentPts.attendancePoints}`}
+                                            >
+                                                <Award size={15} className={studentPts.totalPoints >= 0 ? 'text-amber-600' : 'text-red-500'} />
+                                                <span>{studentPts.totalPoints} نقطة</span>
+                                            </span>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
 
-                            {loggedInStudent.notes && (
+                            {currentStudent.notes && (
                                 <div className="bg-blue-50 border border-blue-200 rounded-2xl p-4 space-y-2">
                                     <div className="flex items-center gap-2">
                                         <AlertTriangle size={16} className="text-blue-600" />
                                         <h4 className="text-xs font-black text-blue-900">ملاحظات من المعلم</h4>
                                     </div>
-                                    <p className="text-xs text-blue-800 font-medium whitespace-pre-wrap">{loggedInStudent.notes}</p>
+                                    <p className="text-xs text-blue-800 font-medium whitespace-pre-wrap">{currentStudent.notes}</p>
+                                </div>
+                            )}
+
+                            {/* Student All-time Points Summary Banner (Controlled by settings.ShowPointsForStudent) */}
+                            {showPointsForStudent && studentPts && (
+                                <div className="bg-gradient-to-r from-amber-50 to-orange-50/50 p-4 rounded-2xl border border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-200 flex items-center justify-center text-amber-700 shrink-0">
+                                            <Award size={22} />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                                                <span>إجمالي نقاط التنافس التراكمية (All-Time)</span>
+                                                {studentPts.isCompleter && (
+                                                    <span className="text-[9px] bg-purple-100 text-purple-800 border border-purple-200 px-1.5 py-0.2 rounded font-black">
+                                                        خاتم
+                                                    </span>
+                                                )}
+                                            </h4>
+                                            <p className="text-[11px] text-amber-800 font-semibold">حساب شامل لكافة جلساتك المسجلة في النظام</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <span className={`text-2xl font-black font-mono px-3 py-1 rounded-xl border ${
+                                            studentPts.totalPoints >= 0 ? 'bg-white text-amber-800 border-amber-200 shadow-xs' : 'bg-red-50 text-red-700 border-red-200'
+                                        }`}>
+                                            {studentPts.totalPoints} <span className="text-xs font-bold">نقطة</span>
+                                        </span>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-2 text-center text-[10px] w-full sm:w-auto">
+                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                            <span className="block text-slate-400 font-bold">جديد</span>
+                                            <span className="font-mono font-black text-indigo-700">+{studentPts.jadidPoints}</span>
+                                        </div>
+                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                            <span className="block text-slate-400 font-bold">مراجعة</span>
+                                            <span className="font-mono font-black text-sky-700">+{studentPts.reviewPoints}</span>
+                                        </div>
+                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                            <span className="block text-slate-400 font-bold">اختبار</span>
+                                            <span className="font-mono font-black text-purple-700">+{studentPts.testPoints}</span>
+                                        </div>
+                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                            <span className="block text-slate-400 font-bold">حضور</span>
+                                            <span className={`font-mono font-black ${studentPts.attendancePoints >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                                                {studentPts.attendancePoints >= 0 ? `+${studentPts.attendancePoints}` : studentPts.attendancePoints}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
 
@@ -3800,6 +3893,24 @@
                                                                 {session.attendance.status}
                                                             </span>
                                                         )}
+
+                                                        {showPointsForStudent && (() => {
+                                                            const sAttPts = getSessionAttendancePoints(session, markazAttendedDatesSet);
+                                                            const sJadidPts = getSessionJadidPoints(session);
+                                                            const sRevPts = getSessionMurajaahPoints(session, isCompleter);
+                                                            const sTestPts = getSessionTestPoints(session);
+                                                            const sTot = sAttPts + sJadidPts + sRevPts + sTestPts;
+                                                            return (
+                                                                <span 
+                                                                    className={`text-[10px] font-black px-2 py-0.5 rounded-full border font-mono ${
+                                                                        sTot >= 0 ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-600 border-red-200'
+                                                                    }`}
+                                                                    title={`حضور: ${sAttPts} | جديد: ${sJadidPts} | مراجعة: ${sRevPts} | اختبار: ${sTestPts}`}
+                                                                >
+                                                                    {sTot >= 0 ? `+${sTot}` : sTot} نقطة
+                                                                </span>
+                                                            );
+                                                        })()}
                                                     </div>
 
                                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 bg-slate-50/50 p-3 rounded-2xl border border-slate-100/70">
