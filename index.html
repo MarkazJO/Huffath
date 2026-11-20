@@ -3649,6 +3649,19 @@
 
                 return (
                     <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans" dir="rtl">
+                        {/* Floating state actions */}
+                        {notification && (
+                            <div className={`fixed bottom-6 right-6 z-50 flex items-center gap-3 px-5 py-4 rounded-2xl shadow-xl transition-all transform duration-300 translate-y-0 scale-100 border text-sm font-bold ${
+                                notification.type === 'success' ? 'bg-emerald-50 text-emerald-800 border-emerald-100' : 
+                                notification.type === 'info' ? 'bg-indigo-50 text-indigo-800 border-indigo-100' : 'bg-amber-50 text-amber-800 border-amber-100'
+                            }`}>
+                                <div className={`p-1.5 rounded-lg ${notification.type === 'success' ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'}`}>
+                                    <CheckCircle2 size={18} />
+                                </div>
+                                <span>{notification.message}</span>
+                            </div>
+                        )}
+
                         <header className="bg-white border-b border-slate-100 px-6 py-4 flex justify-between items-center sticky top-0 z-40 backdrop-blur-md">
                             <div className="flex items-center gap-3">
                                 <div className="p-2.5 bg-purple-600 text-white rounded-2xl shadow-lg shadow-purple-600/10">
@@ -3660,13 +3673,27 @@
                                 </div>
                             </div>
 
-                            <button 
-                                onClick={handleLogout}
-                                className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold transition-all"
-                            >
-                                <LogOut size={14} />
-                                <span>تسجيل الخروج</span>
-                            </button>
+                            <div className="flex items-center gap-2">
+                                <button 
+                                    onClick={loadLiveData}
+                                    disabled={isLoading}
+                                    title="تحديث البيانات من السحابة"
+                                    className={`flex items-center gap-1.5 bg-slate-100 hover:bg-indigo-50 hover:text-indigo-600 text-slate-600 px-3.5 py-2 rounded-xl text-xs font-bold transition-all ${
+                                        isLoading ? 'opacity-70 cursor-not-allowed text-indigo-600 bg-indigo-50' : ''
+                                    }`}
+                                >
+                                    <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} />
+                                    <span>{isLoading ? 'جاري التحديث...' : 'تحديث'}</span>
+                                </button>
+
+                                <button 
+                                    onClick={handleLogout}
+                                    className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 py-2 rounded-xl text-xs font-bold transition-all"
+                                >
+                                    <LogOut size={14} />
+                                    <span>تسجيل الخروج</span>
+                                </button>
+                            </div>
                         </header>
 
                         <main className="p-6 max-w-4xl mx-auto space-y-6">
