@@ -827,7 +827,7 @@
 
         const initialData = {
             "generatedAt": null,
-            "version": 1,
+            "version": 5,
             "settings": {
                 "ShowPointsForStudent": false
             },
@@ -1434,6 +1434,12 @@
             return total;
         };
 
+        const isWebsiteReason = (reasonStr) => {
+            if (!reasonStr || typeof reasonStr !== 'string') return false;
+            const clean = reasonStr.trim().toLowerCase().replace(/[أإآ]/g, 'ا').replace(/\s+/g, ' ');
+            return clean.includes('موقع') || clean === 'website';
+        };
+
         const calculateStudentAllTimePoints = (student, markazDatesSet) => {
             const isCompleter = isStudentCompleter(student);
             let jadidPoints = 0;
@@ -1441,14 +1447,34 @@
             let testPoints = 0;
             let attendancePoints = 0;
 
-            (student.history || []).forEach(session => {
+            (student?.history || []).forEach(session => {
                 attendancePoints += getSessionAttendancePoints(session, markazDatesSet);
                 jadidPoints += getSessionJadidPoints(session);
                 reviewPoints += getSessionMurajaahPoints(session, isCompleter);
                 testPoints += getSessionTestPoints(session);
             });
 
-            const totalPoints = jadidPoints + reviewPoints + testPoints + attendancePoints;
+            let deductionPoints = 0;
+            let extraGivingPoints = 0;
+            let websiteGivingPoints = 0;
+            let totalGivingPoints = 0;
+
+            (student?.pointsLog || []).forEach(entry => {
+                const p = typeof entry.points === 'number' ? entry.points : Number(entry.points) || 0;
+                const reason = (entry.reason || entry.note || entry.details || entry.description || entry.type || '').trim();
+                if (p < 0) {
+                    deductionPoints += p;
+                } else if (p > 0) {
+                    totalGivingPoints += p;
+                    if (isWebsiteReason(reason)) {
+                        websiteGivingPoints += p;
+                    } else {
+                        extraGivingPoints += p; // Only increases points if reason is NOT 'الموقع'
+                    }
+                }
+            });
+
+            const totalPoints = jadidPoints + reviewPoints + testPoints + attendancePoints + extraGivingPoints + deductionPoints;
 
             return {
                 totalPoints,
@@ -1456,6 +1482,12 @@
                 reviewPoints,
                 testPoints,
                 attendancePoints,
+                deductionPoints,
+                extraGivingPoints,
+                websiteGivingPoints,
+                totalGivingPoints,
+                givingPoints: totalGivingPoints,
+                pointsLog: student?.pointsLog || [],
                 isCompleter
             };
         };
@@ -2128,7 +2160,7 @@
                                                 <td className="p-1 border border-slate-300 text-center font-mono font-bold text-[8.5px]">
                                                     <span className={`px-1.5 py-0.5 rounded font-black ${
                                                         (item.points?.totalPoints || 0) >= 0 ? 'bg-amber-50 text-amber-900 border border-amber-200' : 'bg-red-50 text-red-700 border border-red-200'
-                                                    }`} title={`جديد: ${item.points?.jadidPoints} | مراجعة: ${item.points?.reviewPoints} | اختبار: ${item.points?.testPoints} | حضور: ${item.points?.attendancePoints}`}>
+                                                    }`} title={`جديد: ${item.points?.jadidPoints || 0} | مراجعة: ${item.points?.reviewPoints || 0} | اختبار: ${item.points?.testPoints || 0} | حضور: ${item.points?.attendancePoints || 0} | خصم: ${item.points?.deductionPoints || 0} | منح: +${item.points?.givingPoints || 0}`}>
                                                         {item.points?.totalPoints || 0}
                                                     </span>
                                                 </td>
@@ -2169,7 +2201,7 @@
                                             {showPoints && (
                                                 <span className={`px-2 py-0.5 rounded-lg text-xs font-mono font-black border ${
                                                     (item.points?.totalPoints || 0) >= 0 ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'
-                                                }`} title={`جديد: ${item.points?.jadidPoints} | مراجعة: ${item.points?.reviewPoints} | اختبار: ${item.points?.testPoints} | حضور: ${item.points?.attendancePoints}`}>
+                                                }`} title={`جديد: ${item.points?.jadidPoints || 0} | مراجعة: ${item.points?.reviewPoints || 0} | اختبار: ${item.points?.testPoints || 0} | حضور: ${item.points?.attendancePoints || 0} | خصم: ${item.points?.deductionPoints || 0} | منح: +${item.points?.givingPoints || 0}`}>
                                                     {item.points?.totalPoints || 0} نقطة
                                                 </span>
                                             )}
@@ -2935,6 +2967,306 @@
 
 
         // ==========================================
+        // POINTS LOG MODAL (GIVINGS & DEDUCTIONS)
+        // ==========================================
+        const PointsLogModal = ({ student, onClose }) => {
+            if (!student) return null;
+
+            const [filterType, setFilterType] = useState('all'); // 'all' | 'deductions' | 'extraGivings' | 'websiteGivings'
+
+            const pointsLog = useMemo(() => {
+                const list = student.pointsLog || [];
+                return [...list].sort((a, b) => {
+                    const dateA = a.date || '';
+                    const dateB = b.date || '';
+                    return dateB.localeCompare(dateA); // newest first
+                });
+            }, [student.pointsLog]);
+
+            const { totalDeductions, extraGivings, websiteGivings, deductionsCount, extraGivingsCount, websiteGivingsCount } = useMemo(() => {
+                let deductions = 0;
+                let extra = 0;
+                let website = 0;
+                let dCount = 0;
+                let eCount = 0;
+                let wCount = 0;
+
+                (student.pointsLog || []).forEach(item => {
+                    const p = typeof item.points === 'number' ? item.points : Number(item.points) || 0;
+                    const reason = (item.reason || item.note || item.details || item.description || item.type || '').trim();
+                    if (p < 0) {
+                        deductions += p;
+                        dCount += 1;
+                    } else if (p > 0) {
+                        if (isWebsiteReason(reason)) {
+                            website += p;
+                            wCount += 1;
+                        } else {
+                            extra += p;
+                            eCount += 1;
+                        }
+                    }
+                });
+
+                return {
+                    totalDeductions: deductions,
+                    extraGivings: extra,
+                    websiteGivings: website,
+                    deductionsCount: dCount,
+                    extraGivingsCount: eCount,
+                    websiteGivingsCount: wCount
+                };
+            }, [student.pointsLog]);
+
+            const filteredLogs = useMemo(() => {
+                if (filterType === 'deductions') {
+                    return pointsLog.filter(item => {
+                        const p = typeof item.points === 'number' ? item.points : Number(item.points) || 0;
+                        return p < 0;
+                    });
+                }
+                if (filterType === 'extraGivings') {
+                    return pointsLog.filter(item => {
+                        const p = typeof item.points === 'number' ? item.points : Number(item.points) || 0;
+                        const reason = (item.reason || item.note || item.details || item.description || item.type || '').trim();
+                        return p > 0 && !isWebsiteReason(reason);
+                    });
+                }
+                if (filterType === 'websiteGivings') {
+                    return pointsLog.filter(item => {
+                        const p = typeof item.points === 'number' ? item.points : Number(item.points) || 0;
+                        const reason = (item.reason || item.note || item.details || item.description || item.type || '').trim();
+                        return p > 0 && isWebsiteReason(reason);
+                    });
+                }
+                return pointsLog;
+            }, [pointsLog, filterType]);
+
+            const studentGroup = student.group || student.level || '---';
+
+            return (
+                <div 
+                    className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 transition-all"
+                    onClick={onClose}
+                >
+                    <div 
+                        className="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[88vh] animate-in fade-in zoom-in-95 duration-200"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Header */}
+                        <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-6 text-white flex justify-between items-start">
+                            <div>
+                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                    سجل المنح والخصومات والعملة
+                                </span>
+                                <h3 className="text-xl font-black mt-2 text-white">{student.name}</h3>
+                                <p className="text-xs text-slate-300 mt-1">حلقة: {studentGroup}</p>
+                            </div>
+                            <button 
+                                type="button"
+                                onClick={onClose}
+                                className="p-1.5 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors cursor-pointer"
+                                title="إغلاق"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+
+                        {/* Summary KPI Cards */}
+                        <div className="p-4 bg-slate-50 border-b border-slate-100 space-y-3">
+                            <div className="grid grid-cols-3 gap-2 text-center">
+                                <div className="bg-rose-50/80 p-2.5 rounded-2xl border border-rose-100/80">
+                                    <span className="block text-[10px] font-bold text-rose-700 mb-0.5">إجمالي الخصومات</span>
+                                    <span className="text-base sm:text-lg font-black font-mono text-rose-700">
+                                        {totalDeductions !== 0 ? totalDeductions : '0'}
+                                    </span>
+                                    <span className="block text-[8.5px] text-rose-500 font-semibold mt-0.5">تخصم من المجموع</span>
+                                </div>
+                                <div className="bg-emerald-50/80 p-2.5 rounded-2xl border border-emerald-100/80">
+                                    <span className="block text-[10px] font-bold text-emerald-700 mb-0.5">منح إضافية</span>
+                                    <span className="text-base sm:text-lg font-black font-mono text-emerald-700">
+                                        {extraGivings > 0 ? `+${extraGivings}` : '0'}
+                                    </span>
+                                    <span className="block text-[8.5px] text-emerald-600 font-semibold mt-0.5">تزيد في المجموع</span>
+                                </div>
+                                <div className="bg-sky-50/80 p-2.5 rounded-2xl border border-sky-100/80">
+                                    <span className="block text-[10px] font-bold text-sky-800 mb-0.5">صرف عملة (الموقع)</span>
+                                    <span className="text-base sm:text-lg font-black font-mono text-sky-700">
+                                        {websiteGivings > 0 ? `+${websiteGivings}` : '0'}
+                                    </span>
+                                    <span className="block text-[8.5px] text-sky-500 font-semibold mt-0.5">عملة مسلمة عن الموقع</span>
+                                </div>
+                            </div>
+
+                            {/* Filter tabs */}
+                            <div className="flex items-center gap-1.5 pt-2 border-t border-slate-200/60 overflow-x-auto text-[11px]">
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterType('all')}
+                                    className={`px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                                        filterType === 'all' 
+                                            ? 'bg-slate-800 text-white shadow-xs' 
+                                            : 'bg-white text-slate-600 hover:bg-slate-200/60 border border-slate-200'
+                                    }`}
+                                >
+                                    الكل ({pointsLog.length})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterType('deductions')}
+                                    className={`px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                                        filterType === 'deductions' 
+                                            ? 'bg-rose-600 text-white shadow-xs' 
+                                            : 'bg-white text-rose-700 hover:bg-rose-50 border border-rose-200'
+                                    }`}
+                                >
+                                    الخصومات ({deductionsCount})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterType('extraGivings')}
+                                    className={`px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                                        filterType === 'extraGivings' 
+                                            ? 'bg-emerald-600 text-white shadow-xs' 
+                                            : 'bg-white text-emerald-700 hover:bg-emerald-50 border border-emerald-200'
+                                    }`}
+                                >
+                                    المنح الإضافية ({extraGivingsCount})
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setFilterType('websiteGivings')}
+                                    className={`px-2.5 py-1 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
+                                        filterType === 'websiteGivings' 
+                                            ? 'bg-sky-600 text-white shadow-xs' 
+                                            : 'bg-white text-sky-700 hover:bg-sky-50 border border-sky-200'
+                                    }`}
+                                >
+                                    عملة الموقع ({websiteGivingsCount})
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* List of Entries */}
+                        <div className="p-4 overflow-y-auto space-y-2.5 flex-1">
+                            {filteredLogs.length === 0 ? (
+                                <div className="text-center py-10 px-4">
+                                    <div className="w-12 h-12 rounded-2xl bg-slate-100 text-slate-400 flex items-center justify-center mx-auto mb-3">
+                                        <Info size={24} />
+                                    </div>
+                                    <p className="text-xs font-bold text-slate-500">
+                                        {filterType === 'deductions' ? 'لا توجد خصومات مسجلة لهذا الطالب' :
+                                         filterType === 'extraGivings' ? 'لا توجد منح إضافية مسجلة لهذا الطالب' :
+                                         filterType === 'websiteGivings' ? 'لا توجد عمليات صرف عملة مسجلة لهذا الطالب' :
+                                         'لا توجد سجلات منح أو خصومات مسجلة لهذا الطالب'}
+                                    </p>
+                                    <p className="text-[11px] text-slate-400 mt-1">يتم تحديث العمليات آلياً عند تسجيلها في النظام</p>
+                                </div>
+                            ) : (
+                                filteredLogs.map((entry, idx) => {
+                                    const pts = typeof entry.points === 'number' ? entry.points : Number(entry.points) || 0;
+                                    const isDeduction = pts < 0;
+                                    const isGiving = pts > 0;
+                                    const reason = (entry.reason || entry.note || entry.description || entry.details || entry.type || '').trim();
+                                    const isWebsite = isGiving && isWebsiteReason(reason);
+
+                                    return (
+                                        <div 
+                                            key={idx}
+                                            className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                                                isDeduction 
+                                                    ? 'bg-rose-50/40 border-rose-100 hover:bg-rose-50/70' 
+                                                    : isWebsite
+                                                        ? 'bg-sky-50/40 border-sky-100 hover:bg-sky-50/70'
+                                                        : 'bg-emerald-50/40 border-emerald-100 hover:bg-emerald-50/70'
+                                            }`}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-black text-sm shrink-0 ${
+                                                    isDeduction 
+                                                        ? 'bg-rose-100 text-rose-700' 
+                                                        : isWebsite
+                                                            ? 'bg-sky-100 text-sky-700'
+                                                            : 'bg-emerald-100 text-emerald-700'
+                                                }`}>
+                                                    {isDeduction ? '−' : '+'}
+                                                </div>
+                                                <div>
+                                                    <div className="flex items-center flex-wrap gap-1.5">
+                                                        <span className={`text-xs font-black ${
+                                                            isDeduction 
+                                                                ? 'text-rose-800' 
+                                                                : isWebsite
+                                                                    ? 'text-sky-800'
+                                                                    : 'text-emerald-800'
+                                                        }`}>
+                                                            {isDeduction 
+                                                                ? 'خصم نقاط' 
+                                                                : isWebsite 
+                                                                    ? 'صرف عملة ورقية (الموقع)' 
+                                                                    : 'منح نقاط إضافية'}
+                                                        </span>
+                                                        {reason && (
+                                                            <span className="text-[10px] text-slate-600 font-bold bg-white/80 px-2 py-0.5 rounded-md border border-slate-200/60">
+                                                                السبب: {reason}
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <p className="text-[10px] text-slate-400 font-semibold">
+                                                            {formatDateWithWeekday(entry.date)}
+                                                        </p>
+                                                        {isWebsite ? (
+                                                            <span className="text-[9px] text-sky-600 bg-sky-100/60 px-1.5 py-0.2 rounded font-bold">
+                                                                محسوبة في نقاط الموقع (لا تكرر)
+                                                            </span>
+                                                        ) : isDeduction ? (
+                                                            <span className="text-[9px] text-rose-600 bg-rose-100/60 px-1.5 py-0.2 rounded font-bold">
+                                                                مخصومة من المجموع
+                                                            </span>
+                                                        ) : (
+                                                            <span className="text-[9px] text-emerald-600 bg-emerald-100/60 px-1.5 py-0.2 rounded font-bold">
+                                                                مضافة للمجموع
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="text-left font-mono shrink-0">
+                                                <span className={`px-2.5 py-1 rounded-xl text-xs font-black border inline-block ${
+                                                    isDeduction 
+                                                        ? 'bg-rose-100/80 text-rose-700 border-rose-200' 
+                                                        : isWebsite
+                                                            ? 'bg-sky-100/80 text-sky-700 border-sky-200'
+                                                            : 'bg-emerald-100/80 text-emerald-700 border-emerald-200'
+                                                }`}>
+                                                    {pts > 0 ? `+${pts}` : pts} {isWebsite ? 'عملة' : 'نقطة'}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+
+                        {/* Footer */}
+                        <div className="p-3 bg-slate-50 border-t border-slate-100 flex justify-end">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                            >
+                                إغلاق
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+
+        // ==========================================
         // MAIN REACT APPLICATION COMPONENT
         // ==========================================
         function App() {
@@ -2964,6 +3296,7 @@
             const [selectedLevel, setSelectedLevel] = useState('all');
             const [sortBy, setSortBy] = useState('name-asc'); // Sorting orders
             const [selectedStudent, setSelectedStudent] = useState(null); // Detail modal student
+            const [viewingPointsLogStudent, setViewingPointsLogStudent] = useState(null); // Points log modal student
             const [showAddSessionModal, setShowAddSessionModal] = useState(false);
             const [showAddStudentModal, setShowAddStudentModal] = useState(false);
             const [notification, setNotification] = useState(null);
@@ -3784,7 +4117,7 @@
                                                 className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black font-mono shadow-xs border ${
                                                     studentPts.totalPoints >= 0 ? 'bg-amber-50 text-amber-800 border-amber-200/70' : 'bg-red-50 text-red-700 border-red-200'
                                                 }`}
-                                                title={`جديد: ${studentPts.jadidPoints} | مراجعة: ${studentPts.reviewPoints} | اختبار: ${studentPts.testPoints} | حضور: ${studentPts.attendancePoints}`}
+                                                title={`جديد: ${studentPts.jadidPoints} | مراجعة: ${studentPts.reviewPoints} | اختبار: ${studentPts.testPoints} | حضور: ${studentPts.attendancePoints} | خصم: ${studentPts.deductionPoints || 0} | منح: +${studentPts.givingPoints || 0}`}
                                             >
                                                 <Award size={15} className={studentPts.totalPoints >= 0 ? 'text-amber-600' : 'text-red-500'} />
                                                 <span>{studentPts.totalPoints} نقطة</span>
@@ -3830,23 +4163,36 @@
                                             {studentPts.totalPoints} <span className="text-xs font-bold">نقطة</span>
                                         </span>
                                     </div>
-                                    <div className="grid grid-cols-4 gap-2 text-center text-[10px] w-full sm:w-auto">
-                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                    <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-center text-[9px] sm:text-[10px] w-full sm:w-auto">
+                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                             <span className="block text-slate-400 font-bold">جديد</span>
                                             <span className="font-mono font-black text-indigo-700">+{studentPts.jadidPoints}</span>
                                         </div>
-                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                             <span className="block text-slate-400 font-bold">مراجعة</span>
                                             <span className="font-mono font-black text-sky-700">+{studentPts.reviewPoints}</span>
                                         </div>
-                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                             <span className="block text-slate-400 font-bold">اختبار</span>
                                             <span className="font-mono font-black text-purple-700">+{studentPts.testPoints}</span>
                                         </div>
-                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                             <span className="block text-slate-400 font-bold">حضور</span>
                                             <span className={`font-mono font-black ${studentPts.attendancePoints >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                                                 {studentPts.attendancePoints >= 0 ? `+${studentPts.attendancePoints}` : studentPts.attendancePoints}
+                                            </span>
+                                        </div>
+                                        <div 
+                                            onClick={() => setViewingPointsLogStudent(currentStudent)}
+                                            className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs cursor-pointer hover:bg-rose-50/80 hover:border-rose-200 transition-all select-none group/deduct"
+                                            title="انقر لعرض سجل المنح والخصومات"
+                                        >
+                                            <span className="block text-slate-400 font-bold group-hover/deduct:text-rose-600 transition-colors flex items-center justify-center gap-0.5">
+                                                <span>خصم</span>
+                                                <span className="text-[8px] text-rose-500">↗</span>
+                                            </span>
+                                            <span className={`font-mono font-black ${studentPts.deductionPoints < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                                                {studentPts.deductionPoints !== 0 ? studentPts.deductionPoints : '0'}
                                             </span>
                                         </div>
                                     </div>
@@ -4607,7 +4953,7 @@
                                                                         </span>
                                                                     </div>
                                                                     <div className="bg-amber-50/30 rounded-2xl p-2.5 border border-amber-100/40 group-hover:bg-amber-50/60 transition-all">
-                                                                        <div className="grid grid-cols-4 gap-1 text-center">
+                                                                        <div className="grid grid-cols-5 gap-1 text-center">
                                                                             <div className="bg-white/80 p-1.5 rounded-xl border border-amber-100/50">
                                                                                 <span className="block text-[9px] text-slate-400 font-bold">جديد</span>
                                                                                 <span className="text-[11px] font-black text-indigo-700 font-mono">+{studentPts.jadidPoints}</span>
@@ -4624,6 +4970,22 @@
                                                                                 <span className="block text-[9px] text-slate-400 font-bold">حضور</span>
                                                                                 <span className={`text-[11px] font-black font-mono ${studentPts.attendancePoints >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                                                                                     {studentPts.attendancePoints >= 0 ? `+${studentPts.attendancePoints}` : studentPts.attendancePoints}
+                                                                                </span>
+                                                                            </div>
+                                                                            <div 
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setViewingPointsLogStudent(student);
+                                                                                }}
+                                                                                className="bg-white/80 p-1.5 rounded-xl border border-amber-100/50 cursor-pointer hover:bg-rose-50/80 hover:border-rose-200 transition-all select-none group/deduct"
+                                                                                title="انقر لعرض سجل المنح والخصومات"
+                                                                            >
+                                                                                <span className="block text-[9px] text-slate-400 font-bold group-hover/deduct:text-rose-600 transition-colors flex items-center justify-center gap-0.5">
+                                                                                    <span>خصم</span>
+                                                                                    <span className="text-[8px] text-rose-500">↗</span>
+                                                                                </span>
+                                                                                <span className={`text-[11px] font-black font-mono ${studentPts.deductionPoints < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                                                                                    {studentPts.deductionPoints !== 0 ? studentPts.deductionPoints : '0'}
                                                                                 </span>
                                                                             </div>
                                                                         </div>
@@ -4804,7 +5166,7 @@
                                                             </td>
                                                             <td className="px-4 py-3 text-center" onClick={(e) => { e.stopPropagation(); setSelectedStudent(student); }}>
                                                                 {(() => {
-                                                                    const studentPts = allTimePointsByStudentId?.get(student.id) || { totalPoints: 0, jadidPoints: 0, reviewPoints: 0, testPoints: 0, attendancePoints: 0 };
+                                                                    const studentPts = allTimePointsByStudentId?.get(student.id) || { totalPoints: 0, jadidPoints: 0, reviewPoints: 0, testPoints: 0, attendancePoints: 0, deductionPoints: 0, givingPoints: 0, pointsLog: [] };
                                                                     return (
                                                                         <span 
                                                                             className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-black font-mono shadow-xs border ${
@@ -4812,7 +5174,7 @@
                                                                                     ? 'bg-amber-50 text-amber-800 border-amber-200/70' 
                                                                                     : 'bg-red-50 text-red-700 border-red-200'
                                                                             }`}
-                                                                            title={`جديد: ${studentPts.jadidPoints} | مراجعة: ${studentPts.reviewPoints} | اختبار: ${studentPts.testPoints} | حضور: ${studentPts.attendancePoints}`}
+                                                                            title={`جديد: ${studentPts.jadidPoints} | مراجعة: ${studentPts.reviewPoints} | اختبار: ${studentPts.testPoints} | حضور: ${studentPts.attendancePoints} | خصم: ${studentPts.deductionPoints || 0} | منح: +${studentPts.givingPoints || 0}`}
                                                                         >
                                                                             <Award size={12} className={studentPts.totalPoints >= 0 ? 'text-amber-600' : 'text-red-500'} />
                                                                             <span>{studentPts.totalPoints}</span>
@@ -5026,29 +5388,65 @@
                                                             {modalStudentPts.totalPoints} <span className="text-xs font-bold">نقطة</span>
                                                         </span>
                                                     </div>
-                                                    <div className="grid grid-cols-4 gap-2 text-center text-[10px] w-full sm:w-auto">
-                                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                                    <div className="grid grid-cols-5 gap-1.5 sm:gap-2 text-center text-[9px] sm:text-[10px] w-full sm:w-auto">
+                                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                                             <span className="block text-slate-400 font-bold">جديد</span>
                                                             <span className="font-mono font-black text-indigo-700">+{modalStudentPts.jadidPoints}</span>
                                                         </div>
-                                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                                             <span className="block text-slate-400 font-bold">مراجعة</span>
                                                             <span className="font-mono font-black text-sky-700">+{modalStudentPts.reviewPoints}</span>
                                                         </div>
-                                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                                             <span className="block text-slate-400 font-bold">اختبار</span>
                                                             <span className="font-mono font-black text-purple-700">+{modalStudentPts.testPoints}</span>
                                                         </div>
-                                                        <div className="bg-white/90 px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
+                                                        <div className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs">
                                                             <span className="block text-slate-400 font-bold">حضور</span>
                                                             <span className={`font-mono font-black ${modalStudentPts.attendancePoints >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
                                                                 {modalStudentPts.attendancePoints >= 0 ? `+${modalStudentPts.attendancePoints}` : modalStudentPts.attendancePoints}
+                                                            </span>
+                                                        </div>
+                                                        <div 
+                                                            onClick={() => setViewingPointsLogStudent(selectedStudent)}
+                                                            className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs cursor-pointer hover:bg-rose-50/80 hover:border-rose-200 transition-all select-none group/deduct"
+                                                            title="انقر لعرض سجل المنح والخصومات"
+                                                        >
+                                                            <span className="block text-slate-400 font-bold group-hover/deduct:text-rose-600 transition-colors flex items-center justify-center gap-0.5">
+                                                                <span>خصم</span>
+                                                                <span className="text-[8px] text-rose-500">↗</span>
+                                                            </span>
+                                                            <span className={`font-mono font-black ${modalStudentPts.deductionPoints < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
+                                                                {modalStudentPts.deductionPoints !== 0 ? modalStudentPts.deductionPoints : '0'}
                                                             </span>
                                                         </div>
                                                     </div>
                                                 </div>
                                             );
                                         })()}
+
+                                        {Array.isArray(selectedStudent.pointsLog) && selectedStudent.pointsLog.length > 0 && (
+                                            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-rose-50 via-amber-50 to-emerald-50 border border-amber-200/60 rounded-2xl shadow-xs">
+                                                <div className="flex items-center gap-2.5">
+                                                    <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-pulse"></span>
+                                                    <div>
+                                                        <p className="text-xs font-black text-slate-800">
+                                                            سجل المنح والخصومات ({selectedStudent.pointsLog.length} عملية مسجلة)
+                                                        </p>
+                                                        <p className="text-[10px] text-slate-500 font-semibold">
+                                                            يتضمن تفاصيل النقاط الإضافية والخصومات وتواريخها
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setViewingPointsLogStudent(selectedStudent)}
+                                                    className="px-3.5 py-1.5 bg-white hover:bg-slate-50 text-slate-800 border border-slate-200 rounded-xl text-xs font-black shadow-xs transition-all cursor-pointer"
+                                                >
+                                                    فتح السجل
+                                                </button>
+                                            </div>
+                                        )}
 
                                         <div className="p-3 bg-amber-50 border border-amber-100 text-amber-800 text-xs font-semibold rounded-2xl flex items-center gap-2">
                                             <Calendar size={16} className="text-amber-600 flex-shrink-0" />
@@ -5487,6 +5885,14 @@
 
                             </form>
                         </div>
+                    )}
+
+                    {/* --- MODAL 5: POINTS LOG (GIVINGS & DEDUCTIONS) --- */}
+                    {viewingPointsLogStudent && (
+                        <PointsLogModal
+                            student={viewingPointsLogStudent}
+                            onClose={() => setViewingPointsLogStudent(null)}
+                        />
                     )}
 
                 </div>
