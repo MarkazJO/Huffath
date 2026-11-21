@@ -3210,6 +3210,38 @@
                     )
                     : null;
 
+                const pagesMetricsByStudentId = (sortBy && sortBy.startsWith('pages-'))
+                    ? new Map(
+                        list.map(student => {
+                            const studentHistory = student.history || [];
+                            const studentHistoryWithIndex = studentHistory.map((session, idx) => ({ session, idx }));
+                            const splitStats = getSessionSplitStatsByIndex(studentHistory);
+                            const filteredEntries = studentHistoryWithIndex.filter(({ session }) => isDateInRange(session.date));
+                            const filteredHistory = filteredEntries.map(({ session }) => session);
+
+                            const totalNewPagesInRange = calculateTotalNewPagesInRange(filteredEntries, splitStats);
+                            const totalReviewPagesInRange = filteredHistory.reduce((acc, curr) => acc + getNumericPages(curr.review), 0);
+
+                            return [student.id, {
+                                jadidPages: totalNewPagesInRange,
+                                reviewPages: totalReviewPagesInRange
+                            }];
+                        })
+                    )
+                    : null;
+
+                const attendanceMetricsByStudentId = (sortBy && sortBy.startsWith('attendance-'))
+                    ? new Map(
+                        list.map(student => {
+                            const studentHistory = student.history || [];
+                            const attendedDays = studentHistory
+                                .filter(session => isDateInRange(session.date) && isAttendancePresent(session.attendance))
+                                .length;
+                            return [student.id, attendedDays];
+                        })
+                    )
+                    : null;
+
                 list.sort((a, b) => {
                     if (sortBy === 'name-asc') {
                         return a.name.localeCompare(b.name, 'ar');
@@ -3246,6 +3278,48 @@
                         const aMet = progressMetricsByStudentId?.get(a.id);
                         const bMet = progressMetricsByStudentId?.get(b.id);
                         const diff = (bMet?.reviewProgress || 0) - (aMet?.reviewProgress || 0);
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
+                    if (sortBy === 'pages-jadid-desc') {
+                        const aPages = pagesMetricsByStudentId?.get(a.id)?.jadidPages ?? 0;
+                        const bPages = pagesMetricsByStudentId?.get(b.id)?.jadidPages ?? 0;
+                        const diff = bPages - aPages;
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
+                    if (sortBy === 'pages-jadid-asc') {
+                        const aPages = pagesMetricsByStudentId?.get(a.id)?.jadidPages ?? 0;
+                        const bPages = pagesMetricsByStudentId?.get(b.id)?.jadidPages ?? 0;
+                        const diff = aPages - bPages;
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
+                    if (sortBy === 'pages-review-desc') {
+                        const aPages = pagesMetricsByStudentId?.get(a.id)?.reviewPages ?? 0;
+                        const bPages = pagesMetricsByStudentId?.get(b.id)?.reviewPages ?? 0;
+                        const diff = bPages - aPages;
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
+                    if (sortBy === 'pages-review-asc') {
+                        const aPages = pagesMetricsByStudentId?.get(a.id)?.reviewPages ?? 0;
+                        const bPages = pagesMetricsByStudentId?.get(b.id)?.reviewPages ?? 0;
+                        const diff = aPages - bPages;
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
+                    if (sortBy === 'attendance-desc') {
+                        const aAtt = attendanceMetricsByStudentId?.get(a.id) ?? 0;
+                        const bAtt = attendanceMetricsByStudentId?.get(b.id) ?? 0;
+                        const diff = bAtt - aAtt;
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
+                    if (sortBy === 'attendance-asc') {
+                        const aAtt = attendanceMetricsByStudentId?.get(a.id) ?? 0;
+                        const bAtt = attendanceMetricsByStudentId?.get(b.id) ?? 0;
+                        const diff = aAtt - bAtt;
                         if (diff !== 0) return diff;
                         return a.name.localeCompare(b.name, 'ar');
                     }
@@ -4344,6 +4418,12 @@
                                                 <option value="progress-composite-desc">الأعلى إنجازاً (الكلي)</option>
                                                 <option value="progress-jadid-desc">الأعلى إنجازاً (جديد)</option>
                                                 <option value="progress-review-desc">الأعلى إنجازاً (مراجعة)</option>
+                                                <option value="pages-jadid-desc">الأكثر صفحات (جديد)</option>
+                                                <option value="pages-jadid-asc">الأقل صفحات (جديد)</option>
+                                                <option value="pages-review-desc">الأكثر صفحات (مراجعة)</option>
+                                                <option value="pages-review-asc">الأقل صفحات (مراجعة)</option>
+                                                <option value="attendance-desc">الأكثر حضوراً</option>
+                                                <option value="attendance-asc">الأقل حضوراً</option>
                                             </select>
                                         </div>
 
@@ -4593,14 +4673,65 @@
                                         <table className="w-full text-right">
                                             <thead>
                                                 <tr className="border-b-2 border-slate-200 bg-slate-50">
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الاسم</th>
+                                                    <th 
+                                                        onClick={() => setSortBy('name-asc')}
+                                                        className="px-4 py-3 font-black text-slate-700 text-xs text-right cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                                        title="ترتيب أبجدي حسب الاسم"
+                                                    >
+                                                        الاسم
+                                                    </th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">المجموعة</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">حفظ جديد</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">مراجعة</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-center">نقاط التنافس</th>
+                                                    <th 
+                                                        onClick={() => setSortBy(prev => prev === 'pages-jadid-desc' ? 'pages-jadid-asc' : 'pages-jadid-desc')}
+                                                        className="px-4 py-3 font-black text-slate-700 text-xs text-right cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                                        title="ترتيب حسب عدد صفحات الحفظ الجديد"
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            <span>حفظ جديد</span>
+                                                            <ArrowUpDown size={11} className={sortBy.startsWith('pages-jadid') ? 'text-indigo-600' : 'text-slate-300'} />
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => setSortBy(prev => prev === 'pages-review-desc' ? 'pages-review-asc' : 'pages-review-desc')}
+                                                        className="px-4 py-3 font-black text-slate-700 text-xs text-right cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                                        title="ترتيب حسب عدد صفحات المراجعة"
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            <span>مراجعة</span>
+                                                            <ArrowUpDown size={11} className={sortBy.startsWith('pages-review') ? 'text-indigo-600' : 'text-slate-300'} />
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => setSortBy(prev => prev === 'points-desc' ? 'points-asc' : 'points-desc')}
+                                                        className="px-4 py-3 font-black text-slate-700 text-xs text-center cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                                        title="ترتيب حسب نقاط التنافس"
+                                                    >
+                                                        <div className="flex items-center justify-center gap-1">
+                                                            <span>نقاط التنافس</span>
+                                                            <ArrowUpDown size={11} className={sortBy.startsWith('points-') ? 'text-indigo-600' : 'text-slate-300'} />
+                                                        </div>
+                                                    </th>
                                                     <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الهدف</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الإنجاز</th>
-                                                    <th className="px-4 py-3 font-black text-slate-700 text-xs text-right">الحضور</th>
+                                                    <th 
+                                                        onClick={() => setSortBy('progress-composite-desc')}
+                                                        className="px-4 py-3 font-black text-slate-700 text-xs text-right cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                                        title="ترتيب حسب نسبة الإنجاز الكلي"
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            <span>الإنجاز</span>
+                                                            <ArrowUpDown size={11} className={sortBy.startsWith('progress-') ? 'text-indigo-600' : 'text-slate-300'} />
+                                                        </div>
+                                                    </th>
+                                                    <th 
+                                                        onClick={() => setSortBy(prev => prev === 'attendance-desc' ? 'attendance-asc' : 'attendance-desc')}
+                                                        className="px-4 py-3 font-black text-slate-700 text-xs text-right cursor-pointer hover:text-indigo-600 transition-colors select-none"
+                                                        title="ترتيب حسب الحضور"
+                                                    >
+                                                        <div className="flex items-center gap-1">
+                                                            <span>الحضور</span>
+                                                            <ArrowUpDown size={11} className={sortBy.startsWith('attendance-') ? 'text-indigo-600' : 'text-slate-300'} />
+                                                        </div>
+                                                    </th>
                                                 </tr>
                                             </thead>
                                             <tbody>
