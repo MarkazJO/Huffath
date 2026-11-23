@@ -2252,6 +2252,23 @@
                                             <strong>ملاحظات:</strong> {item.student.notes}
                                         </div>
                                     )}
+
+                                    {Array.isArray(item.student.warningsLog) && item.student.warningsLog.length > 0 && (
+                                        <div className="text-[11px] text-rose-800 bg-rose-50/80 p-2 rounded-lg border border-rose-200">
+                                            <div className="font-bold flex items-center gap-1 text-rose-900 mb-1">
+                                                <AlertTriangle size={12} className="text-rose-600" />
+                                                <span>إنذارات مسجلة ({item.student.warningsLog.length}):</span>
+                                            </div>
+                                            <div className="space-y-0.5 text-[10px]">
+                                                {item.student.warningsLog.map((w, i) => (
+                                                    <div key={i} className="flex justify-between items-center bg-white/70 px-1.5 py-0.5 rounded">
+                                                        <span>• {w.reason || 'إنذار بدون سبب'}</span>
+                                                        <span className="font-mono text-rose-600 font-bold">{w.date}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -2407,6 +2424,23 @@
                                     {showNotes && item.student.notes && (
                                         <div className="bg-blue-50 border border-blue-200 p-2.5 rounded-xl text-xs text-blue-900">
                                             <strong>ملاحظات المعلم:</strong> {item.student.notes}
+                                        </div>
+                                    )}
+
+                                    {Array.isArray(item.student.warningsLog) && item.student.warningsLog.length > 0 && (
+                                        <div className="bg-rose-50 border border-rose-200 p-2.5 rounded-xl text-xs text-rose-900 space-y-1.5">
+                                            <div className="font-bold flex items-center gap-1.5">
+                                                <AlertTriangle size={14} className="text-rose-600" />
+                                                <span>سجل الإنذارات ({item.student.warningsLog.length}):</span>
+                                            </div>
+                                            <div className="space-y-1">
+                                                {item.student.warningsLog.map((w, wIdx) => (
+                                                    <div key={wIdx} className="flex justify-between items-center bg-white/80 px-2 py-1 rounded text-[11px]">
+                                                        <span>• {w.reason || 'إنذار بدون سبب'}</span>
+                                                        <span className="font-mono text-[10px] text-rose-600 font-bold">{w.date}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
                                         </div>
                                     )}
                                 </div>
@@ -3656,6 +3690,13 @@
                         if (diff !== 0) return diff;
                         return a.name.localeCompare(b.name, 'ar');
                     }
+                    if (sortBy === 'warnings-desc') {
+                        const aWarn = Array.isArray(a.warningsLog) ? a.warningsLog.length : 0;
+                        const bWarn = Array.isArray(b.warningsLog) ? b.warningsLog.length : 0;
+                        const diff = bWarn - aWarn;
+                        if (diff !== 0) return diff;
+                        return a.name.localeCompare(b.name, 'ar');
+                    }
                     return 0;
                 });
 
@@ -4137,6 +4178,35 @@
                                 </div>
                             )}
 
+                            {Array.isArray(currentStudent.warningsLog) && currentStudent.warningsLog.length > 0 && (
+                                <div className="bg-rose-50/90 border border-rose-200/80 rounded-2xl p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <AlertTriangle size={18} className="text-rose-600" />
+                                            <h4 className="text-xs font-black text-rose-950">
+                                                سجل الإنذارات والتنبيهات ({currentStudent.warningsLog.length})
+                                            </h4>
+                                        </div>
+                                        <span className="text-[10px] bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-0.5 rounded-full font-black">
+                                            {currentStudent.warningsLog.length === 1 ? 'إنذار مسجل' : `${currentStudent.warningsLog.length} إنذارات`}
+                                        </span>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {currentStudent.warningsLog.map((warning, wIdx) => (
+                                            <div key={wIdx} className="bg-white/95 p-3 rounded-xl border border-rose-100 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                                                    <span className="font-bold text-rose-950">{warning.reason || 'إنذار بدون سبب محدد'}</span>
+                                                </div>
+                                                <span className="font-mono text-[10px] text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100/80 self-start sm:self-auto font-bold">
+                                                    {warning.date}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
                             {/* Student All-time Points Summary Banner (Controlled by settings.ShowPointsForStudent) */}
                             {showPointsForStudent && studentPts && (
                                 <div className="bg-gradient-to-r from-amber-50 to-orange-50/50 p-4 rounded-2xl border border-amber-200/70 flex flex-col sm:flex-row items-center justify-between gap-4">
@@ -4184,16 +4254,20 @@
                                         </div>
                                         <div 
                                             onClick={() => setViewingPointsLogStudent(currentStudent)}
-                                            className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs cursor-pointer hover:bg-rose-50/80 hover:border-rose-200 transition-all select-none group/deduct"
-                                            title="انقر لعرض سجل المنح والخصومات"
+                                            className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs cursor-pointer hover:bg-amber-50/80 hover:border-amber-300 transition-all select-none group/deduct"
+                                            title="انقر لعرض سجل العملة والمنح والخصومات"
                                         >
-                                            <span className="block text-slate-400 font-bold group-hover/deduct:text-rose-600 transition-colors flex items-center justify-center gap-0.5">
-                                                <span>خصم</span>
-                                                <span className="text-[8px] text-rose-500">↗</span>
+                                            <span className="block text-slate-400 font-bold group-hover/deduct:text-amber-700 transition-colors flex items-center justify-center gap-0.5">
+                                                <span>عملة</span>
+                                                <span className="text-[8px] text-amber-500">↗</span>
                                             </span>
-                                            <span className={`font-mono font-black ${studentPts.deductionPoints < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                                                {studentPts.deductionPoints !== 0 ? studentPts.deductionPoints : '0'}
-                                            </span>
+                                            {(() => {
+                                                const netPoints = (studentPts.extraGivingPoints || 0) + (studentPts.deductionPoints || 0);
+                                                if (netPoints < 0) return <span className="font-mono font-black text-rose-600">{netPoints}</span>;
+                                                if (netPoints > 0) return <span className="font-mono font-black text-emerald-700">+{netPoints}</span>;
+                                                if ((studentPts.websiteGivingPoints || 0) > 0) return <span className="font-mono font-black text-sky-700">+{studentPts.websiteGivingPoints}</span>;
+                                                return <span className="font-mono font-black text-slate-400">0</span>;
+                                            })()}
                                         </div>
                                     </div>
                                 </div>
@@ -4770,6 +4844,7 @@
                                                 <option value="pages-review-asc">الأقل صفحات (مراجعة)</option>
                                                 <option value="attendance-desc">الأكثر حضوراً</option>
                                                 <option value="attendance-asc">الأقل حضوراً</option>
+                                                <option value="warnings-desc">الأكثر إنذارات</option>
                                             </select>
                                         </div>
 
@@ -4870,10 +4945,19 @@
                                                             <span className="w-2.5 h-2.5 rounded-full bg-slate-200 group-hover:bg-indigo-400 transition-colors"></span>
                                                         </div>
                                                         
-                                                        <div className="flex gap-1.5 text-[10px] font-bold">
+                                                        <div className="flex items-center gap-1.5 text-[10px] font-bold">
                                                             <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded-lg border border-indigo-100/30 font-black">
                                                                 {studentGroup}
                                                             </span>
+                                                            {Array.isArray(student.warningsLog) && student.warningsLog.length > 0 && (
+                                                                <span 
+                                                                    className="px-2 py-1 bg-rose-50 text-rose-700 rounded-lg border border-rose-200/80 font-black flex items-center gap-1 shadow-2xs" 
+                                                                    title={`${student.warningsLog.length} إنذار مسجل`}
+                                                                >
+                                                                    <AlertTriangle size={11} className="text-rose-600" />
+                                                                    <span>{student.warningsLog.length} {student.warningsLog.length === 1 ? 'إنذار' : 'إنذارات'}</span>
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
 
@@ -4977,16 +5061,20 @@
                                                                                     e.stopPropagation();
                                                                                     setViewingPointsLogStudent(student);
                                                                                 }}
-                                                                                className="bg-white/80 p-1.5 rounded-xl border border-amber-100/50 cursor-pointer hover:bg-rose-50/80 hover:border-rose-200 transition-all select-none group/deduct"
-                                                                                title="انقر لعرض سجل المنح والخصومات"
+                                                                                className="bg-white/80 p-1.5 rounded-xl border border-amber-100/50 cursor-pointer hover:bg-amber-50/80 hover:border-amber-300 transition-all select-none group/deduct"
+                                                                                title="انقر لعرض سجل العملة والمنح والخصومات"
                                                                             >
-                                                                                <span className="block text-[9px] text-slate-400 font-bold group-hover/deduct:text-rose-600 transition-colors flex items-center justify-center gap-0.5">
-                                                                                    <span>خصم</span>
-                                                                                    <span className="text-[8px] text-rose-500">↗</span>
+                                                                                <span className="block text-[9px] text-slate-400 font-bold group-hover/deduct:text-amber-700 transition-colors flex items-center justify-center gap-0.5">
+                                                                                    <span>عملة</span>
+                                                                                    <span className="text-[8px] text-amber-500">↗</span>
                                                                                 </span>
-                                                                                <span className={`text-[11px] font-black font-mono ${studentPts.deductionPoints < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                                                                                    {studentPts.deductionPoints !== 0 ? studentPts.deductionPoints : '0'}
-                                                                                </span>
+                                                                                {(() => {
+                                                                                    const netPoints = (studentPts.extraGivingPoints || 0) + (studentPts.deductionPoints || 0);
+                                                                                    if (netPoints < 0) return <span className="text-[11px] font-black font-mono text-rose-600">{netPoints}</span>;
+                                                                                    if (netPoints > 0) return <span className="text-[11px] font-black font-mono text-emerald-700">+{netPoints}</span>;
+                                                                                    if ((studentPts.websiteGivingPoints || 0) > 0) return <span className="text-[11px] font-black font-mono text-sky-700">+{studentPts.websiteGivingPoints}</span>;
+                                                                                    return <span className="text-[11px] font-black font-mono text-slate-400">0</span>;
+                                                                                })()}
                                                                             </div>
                                                                         </div>
                                                                     </div>
@@ -5138,11 +5226,20 @@
                                                             className={`border-b border-slate-100 hover:bg-indigo-50/50 transition-colors cursor-pointer ${index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}`}
                                                         >
                                                             <td className="px-4 py-3 font-bold text-slate-800">
-                                                                <div className="flex items-center gap-1.5">
+                                                                <div className="flex items-center gap-1.5 flex-wrap">
                                                                     <span>{student.name}</span>
                                                                     {isCompleter && (
                                                                         <span className="text-[9px] bg-purple-50 text-purple-700 border border-purple-100/60 px-1.5 py-0.5 rounded font-black">
                                                                             خاتم
+                                                                        </span>
+                                                                    )}
+                                                                    {Array.isArray(student.warningsLog) && student.warningsLog.length > 0 && (
+                                                                        <span 
+                                                                            className="text-[9px] bg-rose-50 text-rose-700 border border-rose-200/80 px-1.5 py-0.5 rounded font-black flex items-center gap-0.5" 
+                                                                            title={`إنذارات مسجلة (${student.warningsLog.length})`}
+                                                                        >
+                                                                            <AlertTriangle size={10} className="text-rose-600" />
+                                                                            <span>{student.warningsLog.length} إنذار</span>
                                                                         </span>
                                                                     )}
                                                                 </div>
@@ -5359,6 +5456,35 @@
                                             </div>
                                         )}
 
+                                        {Array.isArray(selectedStudent.warningsLog) && selectedStudent.warningsLog.length > 0 && (
+                                            <div className="p-4 bg-rose-50/90 border border-rose-200/80 rounded-2xl space-y-3">
+                                                <div className="flex items-center justify-between">
+                                                    <div className="flex items-center gap-2">
+                                                        <AlertTriangle size={17} className="text-rose-600" />
+                                                        <h4 className="text-xs font-black text-rose-950">
+                                                            سجل الإنذارات والتنبيهات ({selectedStudent.warningsLog.length})
+                                                        </h4>
+                                                    </div>
+                                                    <span className="text-[10px] bg-rose-100 text-rose-800 border border-rose-200 px-2.5 py-0.5 rounded-full font-black">
+                                                        {selectedStudent.warningsLog.length === 1 ? 'إنذار واحد' : selectedStudent.warningsLog.length === 2 ? 'إنذاران' : `${selectedStudent.warningsLog.length} إنذارات`}
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    {selectedStudent.warningsLog.map((warning, wIdx) => (
+                                                        <div key={wIdx} className="bg-white/95 p-3 rounded-xl border border-rose-100 shadow-2xs flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0"></span>
+                                                                <span className="font-bold text-rose-950">{warning.reason || 'إنذار بدون سبب محدد'}</span>
+                                                            </div>
+                                                            <span className="font-mono text-[10px] text-rose-600 bg-rose-50 px-2.5 py-1 rounded-lg border border-rose-100/80 self-start sm:self-auto font-bold">
+                                                                {warning.date}
+                                                            </span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         {/* Student All-time Points Summary Banner */}
                                         {(() => {
                                             const modalStudentPts = selectedStudent ? (allTimePointsByStudentId?.get(selectedStudent.id) || calculateStudentAllTimePoints(selectedStudent, markazAttendedDatesSet)) : null;
@@ -5409,16 +5535,20 @@
                                                         </div>
                                                         <div 
                                                             onClick={() => setViewingPointsLogStudent(selectedStudent)}
-                                                            className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs cursor-pointer hover:bg-rose-50/80 hover:border-rose-200 transition-all select-none group/deduct"
-                                                            title="انقر لعرض سجل المنح والخصومات"
+                                                            className="bg-white/90 px-2 sm:px-2.5 py-1.5 rounded-xl border border-amber-200/60 shadow-xs cursor-pointer hover:bg-amber-50/80 hover:border-amber-300 transition-all select-none group/deduct"
+                                                            title="انقر لعرض سجل العملة والمنح والخصومات"
                                                         >
-                                                            <span className="block text-slate-400 font-bold group-hover/deduct:text-rose-600 transition-colors flex items-center justify-center gap-0.5">
-                                                                <span>خصم</span>
-                                                                <span className="text-[8px] text-rose-500">↗</span>
+                                                            <span className="block text-slate-400 font-bold group-hover/deduct:text-amber-700 transition-colors flex items-center justify-center gap-0.5">
+                                                                <span>عملة</span>
+                                                                <span className="text-[8px] text-amber-500">↗</span>
                                                             </span>
-                                                            <span className={`font-mono font-black ${modalStudentPts.deductionPoints < 0 ? 'text-rose-600' : 'text-slate-500'}`}>
-                                                                {modalStudentPts.deductionPoints !== 0 ? modalStudentPts.deductionPoints : '0'}
-                                                            </span>
+                                                            {(() => {
+                                                                const netPoints = (modalStudentPts.extraGivingPoints || 0) + (modalStudentPts.deductionPoints || 0);
+                                                                if (netPoints < 0) return <span className="font-mono font-black text-rose-600">{netPoints}</span>;
+                                                                if (netPoints > 0) return <span className="font-mono font-black text-emerald-700">+{netPoints}</span>;
+                                                                if ((modalStudentPts.websiteGivingPoints || 0) > 0) return <span className="font-mono font-black text-sky-700">+{modalStudentPts.websiteGivingPoints}</span>;
+                                                                return <span className="font-mono font-black text-slate-400">0</span>;
+                                                            })()}
                                                         </div>
                                                     </div>
                                                 </div>
